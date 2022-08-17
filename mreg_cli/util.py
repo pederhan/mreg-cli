@@ -364,12 +364,16 @@ def get(
 def get_list(path: Optional[str], params: dict = {}, ok404: bool = False) -> List[dict]:
     """Uses requests to make a get request.
        Will iterate over paginated results and return result as list."""
-    ret = []
+    ret = []  # type: List[dict]
     while path:
-        result = get(path, params=params, ok404=ok404).json()
-        if 'next' in result:
-            path = result['next']
-            ret.extend(result['results'])
+        resp = get(path, params=params, ok404=ok404)
+        if resp is None:
+            return ret
+        result = resp.json()
+
+        if "next" in result:
+            path = result["next"]
+            ret.extend(result["results"])
         else:
             path = None
     return ret
