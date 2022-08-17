@@ -4,7 +4,8 @@ import logging
 import os
 import re
 import sys
-from typing import Any, Optional, List, Tuple, Union
+from typing import Any, Dict, Optional, List, Tuple, Union, overload, cast
+from typing_extensions import Literal
 import urllib.parse
 
 import requests
@@ -14,6 +15,7 @@ from prompt_toolkit import prompt
 from .exceptions import CliError, HostNotFoundWarning
 from .history import history
 from .log import cli_error, cli_warning
+from .types import ResponseLike
 from . import mocktraffic
 
 location_tags = []  # type: List[str]
@@ -278,7 +280,7 @@ def _update_token(username, password):
     set_file_permissions(mreg_auth_token_file, 0o600)
 
 
-def result_check(result, type, url):
+def result_check(result: ResponseLike, type: str, url: str):
     if not result.ok:
         message = f"{type} \"{url}\": {result.status_code}: {result.reason}"
         try:
@@ -290,7 +292,15 @@ def result_check(result, type, url):
         cli_warning(message)
 
 
-def _request_wrapper(type, path, params={}, ok404=False, first=True, use_json=False, **data):
+def _request_wrapper(
+    type: str,
+    path: str,
+    params: Dict[str, str] = {},
+    ok404: bool = False,
+    first: bool = True,
+    use_json: bool = False,
+    **data,
+) -> Optional[ResponseLike]:
     url = requests.compat.urljoin(mregurl, path)
     mh = mocktraffic.MockTraffic()
 
@@ -300,7 +310,12 @@ def _request_wrapper(type, path, params={}, ok404=False, first=True, use_json=Fa
         if use_json:
             result = getattr(session, type)(url, json=params, timeout=HTTP_TIMEOUT)
         else:
-            result = getattr(session, type)(url, params=params, data=data, timeout=HTTP_TIMEOUT)
+            result = getattr(session, type)(
+                url, params=params, data=data, timeout=HTTP_TIMEOUT
+            )
+        result = cast(
+            requests.Response, result
+        )  # convince mypy that result is a Response
 
     if mh.is_recording():
         mh.record(type, url, params, data, result)
@@ -315,14 +330,38 @@ def _request_wrapper(type, path, params={}, ok404=False, first=True, use_json=Fa
     return result
 
 
-def get(path: str, params: dict = {}, ok404=False) -> requests.Response:
+@overload
+def get(
+    path: str, params: Dict[str, str], ok404: Literal[True]
+) -> Optional[ResponseLike]:
+    ...
+
+
+@overload
+def get(path: str, params: Dict[str, str], ok404: Literal[False]) -> ResponseLike:
+    ...
+
+
+@overload
+def get(
+    path: str, params: Dict[str, str] = ..., *, ok404: bool
+) -> Optional[ResponseLike]:
+    ...
+
+
+@overload
+def get(path: str, params: Dict[str, str] = ...) -> ResponseLike:
+    ...
+
+
+def get(
+    path: str, params: Dict[str, str] = {}, ok404: bool = False
+) -> Optional[ResponseLike]:
     """Uses requests to make a get request."""
     return _request_wrapper("get", path, params=params, ok404=ok404)
 
 
-def get_list(
-    path: Optional[str], params: dict = {}, ok404=False
-) -> List[requests.Response]:
+def get_list(path: Optional[str], params: dict = {}, ok404: bool = False) -> List[dict]:
     """Uses requests to make a get request.
        Will iterate over paginated results and return result as list."""
     ret = []
@@ -336,17 +375,19 @@ def get_list(
     return ret
 
 
-def post(path: str, params: dict = {}, **kwargs) -> requests.Response:
+def post(path: str, params: dict = {}, **kwargs: Any) -> Optional[ResponseLike]:
     """Uses requests to make a post request. Assumes that all kwargs are data fields"""
     return _request_wrapper("post", path, params=params, **kwargs)
 
 
-def patch(path: str, params: dict = {}, use_json=False, **kwargs) -> requests.Response:
+def patch(
+    path: str, params: dict = {}, use_json: bool = False, **kwargs: Any
+) -> Optional[ResponseLike]:
     """Uses requests to make a patch request. Assumes that all kwargs are data fields"""
     return _request_wrapper("patch", path, params=params, use_json=use_json, **kwargs)
 
 
-def delete(path: str, params: dict = {},) -> requests.Response:
+def delete(path: str, params: dict = {}) -> Optional[ResponseLike]:
     """Uses requests to make a delete request."""
     return _request_wrapper("delete", path, params=params)
 
