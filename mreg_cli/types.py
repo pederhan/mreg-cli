@@ -1,4 +1,5 @@
-from typing import Protocol, Any
+from typing import Any
+from typing_extensions import Protocol
 
 
 class ResponseLike(Protocol):
