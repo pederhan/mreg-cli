@@ -1,18 +1,9 @@
 import json
 import os
 from typing import Any, Dict, List
-from typing_extensions import Self
 from urllib.parse import urlparse, urlencode
 from .types import ResponseLike
 import requests
-
-class Singleton(type):
-    __instances = {}  # type: dict["Singleton", object]
-
-    def __call__(cls: "Singleton", *args, **kwargs) -> object:
-        if cls not in cls.__instances:
-            cls.__instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-        return cls.__instances[cls]
 
 
 class MockResponse:
@@ -24,6 +15,15 @@ class MockResponse:
 
     def json(self, *args, **kwargs):
         return self.json_data
+
+
+class Singleton(type):
+    __instances = {}  # type: dict["Singleton", object]
+
+    def __call__(cls: "Singleton", *args, **kwargs) -> object:
+        if cls not in cls.__instances:
+            cls.__instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls.__instances[cls]
 
 
 class MockTraffic(metaclass=Singleton):
