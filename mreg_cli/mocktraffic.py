@@ -51,9 +51,8 @@ class MockTraffic(metaclass=Singleton):
         self.playback = True
         self.filename = filename
         self.line_num = 0
-        f = open(self.filename, "r")
-        lns = f.readlines()
-        f.close()
+        with open(self.filename, "r") as f:
+            lns = f.readlines()
         self.mock_data = []
         for ln in lns:
             self.mock_data.append(json.loads(ln))
