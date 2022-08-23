@@ -23,6 +23,12 @@ def main():
             ],
         },
         install_requires=install_requirements,
+        extras_require={
+            "dev": [
+                "pytest",
+                "pytest_httpserver",
+            ]
+        },
         packages=setuptools.find_packages(
             '.', include=('mreg_cli', 'mreg_cli.*')),
     )

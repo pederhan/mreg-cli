@@ -280,16 +280,15 @@ def _update_token(username: str, password: str) -> None:
         if result.status_code == 400:
             if 'non_field_errors' in res:
                 cli_error("Invalid username/password")
-        else:
-            cli_error(res)
+        cli_error(res)
     token = result.json()['token']
     session.headers.update({"Authorization": f"Token {token}"})
     try:
-        with open(mreg_auth_token_file, 'w', encoding='utf-8') as tokenfile:
-            tokenfile.write(f'{username}¤{token}')
-    except FileNotFoundError:
+        with open(mreg_auth_token_file, "w", encoding="utf-8") as tokenfile:
+            tokenfile.write(f"{username}¤{token}")
+    except FileNotFoundError:  # pragma: no cover
         pass
-    except PermissionError:
+    except PermissionError:  # pragma: no cover
         pass
     set_file_permissions(mreg_auth_token_file, 0o600)
 
@@ -299,7 +298,7 @@ def result_check(result: ResponseLike, type: str, url: str) -> None:
         message = f"{type} \"{url}\": {result.status_code}: {result.reason}"
         try:
             body = result.json()
-        except ValueError:
+        except ValueError:  # pragma: no cover
             pass
         else:
             message += "\n{}".format(json.dumps(body, indent=2))
@@ -658,7 +657,7 @@ def is_valid_email(email: Union[str, bytes]) -> bool:
     """Check if email looks like a valid email"""
     if not isinstance(email, str):
         try:
-            email = str(email)
+            email = email.decode()
         except ValueError:
             return False
     return True if re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email) else False
