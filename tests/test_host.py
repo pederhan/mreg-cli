@@ -1,6 +1,6 @@
 import sys
 
-if sys.version_info > (3, 6):
+if sys.version_info >= (3, 7):
     from contextlib import nullcontext
 from typing import Any, Dict
 
@@ -42,7 +42,7 @@ def test_zoneinfo_for_hostname(
 @pytest.mark.skipif(
     sys.version_info < (3, 7),
     reason="requires python3.7 or higher (contextlib.nullcontext",
-)
+)  # can also use pytest.importorskip("contextlib")
 @pytest.mark.parametrize("force", [True, False])
 @pytest.mark.parametrize("require_zone", [True, False])
 @pytest.mark.parametrize("is404", [True, False])
