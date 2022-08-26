@@ -44,3 +44,34 @@ def sample_network() -> Dict[str, Any]:
         "frozen": True,
         "reserved": 3,
     }
+
+
+@pytest.fixture
+def sample_zone() -> Dict[str, Any]:
+    return {
+        "zone": {
+            "id": 10,
+            "nameservers": [
+                {
+                    "id": 20,
+                    "created_at": "2020-12-03T17:04:19.072289+01:00",
+                    "updated_at": "2020-12-03T17:04:19.072326+01:00",
+                    "name": "ns2.example.org",
+                    "ttl": None,
+                }
+            ],
+            "created_at": "2020-12-03T17:04:18.421880+01:00",
+            "updated_at": "2020-12-03T17:04:25.952258+01:00",
+            "updated": True,
+            "primary_ns": "ns2.example.org",
+            "email": "hostperson@example.org",
+            "serialno": 12345,
+            "serialno_updated_at": "2020-12-03T17:04:19.238809+01:00",
+            "refresh": 360,
+            "retry": 1800,
+            "expire": 2400,
+            "soa_ttl": 1800,
+            "default_ttl": 300,
+            "name": "example.org",
+        }
+    }
