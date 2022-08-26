@@ -1,5 +1,5 @@
 from argparse import Namespace
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import pytest
 from _pytest.capture import CaptureFixture
@@ -25,6 +25,59 @@ def test_print_network(
     pad_len = _get_pad_len(PREFIX, PADDING)
     assert out == PREFIX + (pad_len * " ") + str(info) + "\n"
     assert err == ""
+
+
+@pytest.mark.parametrize("location", ["foo-location", None])
+@pytest.mark.parametrize("category", ["foo-category", None])
+@pytest.mark.parametrize("frozen", [True, False])
+@pytest.mark.parametrize(
+    "network_cidr, network_overlaps", [("10.0.2.0/24", False), ("10.0.1.64/26", True)]
+)
+def test_create(
+    httpserver: HTTPServer,
+    capsys: CaptureFixture[str],
+    sample_network: Dict[str, Any],
+    location: Optional[str],
+    category: Optional[str],
+    frozen: bool,
+    network_cidr: str,
+    network_overlaps: bool,
+) -> None:
+    """Tests network.create() with most arg variations."""
+    if location:
+        util.location_tags = [location]
+    if category:
+        util.category_tags = [category]
+
+    args = Namespace(
+        network=network_cidr,
+        desc="foo-description",
+        vlan="1",
+        category=category,
+        location=location,
+        frozen=frozen,
+    )
+
+    # make sure response's network is the expected value for this test
+    sample_network["network"] = "10.0.1.0/24"
+
+    httpserver.expect_oneshot_request(
+        "/api/v1/networks/", method="GET"
+    ).respond_with_json({"results": [sample_network], "next": None})
+
+    # If not overlapping, expect a POST request
+    if not network_overlaps:
+        httpserver.expect_oneshot_request(
+            "/api/v1/networks/", method="POST"
+        ).respond_with_data(status=201)
+        network.create(args)
+        out, err = capsys.readouterr()
+        assert network_cidr in out
+    else:
+        # If overlapping, expect a warning
+        with pytest.raises(CliWarning) as exc_info:
+            network.create(args)
+        assert "overlap" in exc_info.exconly().lower()
 
 
 @pytest.mark.parametrize(
