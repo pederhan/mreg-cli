@@ -103,8 +103,8 @@ def sample_host() -> Dict[str, Any]:
                 "host": 172,
             }
         ],
-        "cnames": [],
-        "mxs": [],
+        "cnames": [],  # TODO: add cnames
+        "mxs": [],  # TODO: add MX records
         "txts": [
             {
                 "id": 182,
@@ -114,7 +114,7 @@ def sample_host() -> Dict[str, Any]:
                 "host": 172,
             }
         ],
-        "ptr_overrides": [],
+        "ptr_overrides": [],  # TODO: add ptr_overrides
         "hinfo": None,
         "loc": None,
         "created_at": "2020-12-03T17:04:42.566792+01:00",
@@ -124,4 +124,36 @@ def sample_host() -> Dict[str, Any]:
         "ttl": None,
         "comment": "",
         "zone": 10,
+    }
+
+
+@pytest.fixture
+def sample_naptr() -> Dict[str, Any]:
+    return {
+        "id": 11,
+        "created_at": "2020-12-03T17:04:56.063025+01:00",
+        "updated_at": "2020-12-03T17:04:56.063055+01:00",
+        "preference": 16384,
+        "order": 3,
+        "flag": "u",
+        "service": "sip",
+        "regex": "[abc]+",
+        "replacement": "wonk",
+        "host": 174,
+    }
+
+
+@pytest.fixture
+def sample_srv() -> Dict[str, Any]:
+    return {
+        "id": 11,
+        "created_at": "2020-12-03T17:04:58.475354+01:00",
+        "updated_at": "2020-12-03T17:04:58.475385+01:00",
+        "name": "_sip._tcp.example.org",
+        "priority": 10,
+        "weight": 5,
+        "port": 3456,
+        "ttl": None,
+        "zone": 10,
+        "host": 174,
     }
