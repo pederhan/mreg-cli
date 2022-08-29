@@ -75,3 +75,15 @@ def sample_zone() -> Dict[str, Any]:
             "name": "example.org",
         }
     }
+
+
+@pytest.fixture
+def sample_ipaddress() -> Dict[str, Any]:
+    return {
+        "id": 113,
+        "macaddress": "28:85:B1:60:54:DC",
+        "created_at": "2020-12-03T17:04:42.990808+01:00",
+        "updated_at": "2020-12-03T17:04:42.990836+01:00",
+        "ipaddress": "10.0.0.5",
+        "host": 172,
+    }
