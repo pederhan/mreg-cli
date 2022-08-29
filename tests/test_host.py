@@ -3,7 +3,7 @@ import sys
 
 if sys.version_info >= (3, 7):
     from contextlib import nullcontext
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 import pytest
 from mreg_cli import host, util
@@ -13,6 +13,7 @@ from .handlers import (
     assoc_mac_to_ip_handler,
     cname_exists_handler,
     zoneinfo_for_hostname_handler,
+    _host_info_by_name_handler,
 )
 
 
@@ -208,3 +209,47 @@ def test_add(
             host.add(args)
     else:
         host.add(args)
+
+
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("cnames", [[], ["foo-c.example.com"]])
+@pytest.mark.parametrize("has_srv", [True, False])
+@pytest.mark.parametrize("has_natpr", [True, False])
+def test_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_srv: Dict[str, Any],
+    sample_naptr: Dict[str, Any],
+    force: bool,
+    cnames: List[str],
+    has_srv: bool,
+    has_natpr: bool,
+) -> None:
+    """Remove a host from the zone."""
+    args = Namespace(name=sample_host["name"], force=force)
+
+    sample_host["cnames"] = cnames
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    # DELETE handler
+    httpserver.expect_oneshot_request(
+        f"/api/v1/hosts/{sample_host['name']}", method="DELETE"
+    ).respond_with_data(status=204)
+
+    # NAPTR records handler (no query matching)
+    naptr_results = [sample_naptr] if has_natpr else []
+    httpserver.expect_oneshot_request(
+        f"/api/v1/naptrs/", method="GET"
+    ).respond_with_json({"results": naptr_results, "next": None})
+
+    # SRV records handler (no query matching)
+    srv_results = [sample_srv] if has_srv else []
+    httpserver.expect_oneshot_request(f"/api/v1/srvs/", method="GET").respond_with_json(
+        {"results": srv_results, "next": None}
+    )
+
+    if (cnames or has_srv or has_natpr) and not force:
+        with pytest.raises(CliWarning):
+            host.remove(args)
+    else:
+        host.remove(args)
