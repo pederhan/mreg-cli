@@ -11,7 +11,7 @@ from mreg_cli import util
 from mreg_cli.exceptions import CliError, CliWarning, HostNotFoundWarning
 from pytest_httpserver import HTTPServer
 
-from .handlers import cname_exists_handler
+from .handlers import cname_exists_handler, _host_info_by_name_handler
 
 
 def test_set_config() -> None:
@@ -111,68 +111,37 @@ def test_resolve_ip(httpserver: HTTPServer) -> None:
     )  # TODO: make more specific
 
 
-def test_host_info_by_name(httpserver: HTTPServer) -> None:
-    # TODO: make more comprehensive without re-creating test__host_info_by_name() below
-    name = "foo-bar"
-    cleaned = util.clean_hostname(name)  # make sure we get URL right
-
+def test_host_info_by_name(httpserver: HTTPServer, sample_host: Dict[str, Any]) -> None:
     # Exact match
-    resp = {"name": "foo"}
-    httpserver.expect_oneshot_request(
-        f"/api/v1/hosts/{cleaned}", method="GET"
-    ).respond_with_json(resp)
-
-    assert util.host_info_by_name(name) == resp
+    _host_info_by_name_handler(httpserver, sample_host)
+    assert util.host_info_by_name(sample_host["name"]) == sample_host
 
     # NOTE: we do NOT test with follow_cname=True here,
     # as we already have a test for that in test__host_info_by_name()
-    httpserver.expect_oneshot_request(
-        f"/api/v1/hosts/{cleaned}", method="GET"
-    ).respond_with_data(status=404)
+    _host_info_by_name_handler(httpserver, sample_host, is404=True)
+
     with pytest.raises(HostNotFoundWarning) as exc_info:
-        util.host_info_by_name(name, follow_cname=False)
+        util.host_info_by_name(sample_host["name"], follow_cname=False)
+
     assert "not found" in exc_info.exconly().lower()
 
 
-def test__host_info_by_name(httpserver: HTTPServer) -> None:
-    name = "foo-bar"
-    pname = urllib.parse.quote(name)
-
+def test__host_info_by_name(
+    httpserver: HTTPServer, sample_host: Dict[str, Any]
+) -> None:
     # Exact match
-    httpserver.expect_oneshot_request(
-        f"/api/v1/hosts/{pname}", method="GET"
-    ).respond_with_json(
-        {
-            "name": "foo",
-        },
-    )
-    host = util._host_info_by_name(name, follow_cname=False)
-    assert host == {"name": "foo"}
+    _host_info_by_name_handler(httpserver, sample_host)
+    host = util._host_info_by_name(sample_host["name"], follow_cname=False)
+    assert host == sample_host
 
     # Match via CNAME lookup
-    httpserver.expect_oneshot_request(
-        f"/api/v1/hosts/{pname}", method="GET"
-    ).respond_with_data(
-        status=404
-    )  # Set up 404 response to fall back on CNAME lookup
+    _host_info_by_name_handler(httpserver, sample_host, cname=True)
+    host_cname = util._host_info_by_name(sample_host["name"], follow_cname=True)
+    assert host_cname == sample_host
 
-    # The handler for the CNAME lookup
-    httpserver.expect_oneshot_request(
-        f"/api/v1/hosts/", method="GET", query_string=f"cnames__name={pname}"
-    ).respond_with_json(
-        {
-            "results": [{"name": "foo"}],
-            "next": None,
-        },
-    )
-    host_cname = util._host_info_by_name(name, follow_cname=True)
-    assert host_cname == {"name": "foo"}
-
-    # No match
-    httpserver.expect_oneshot_request(
-        f"/api/v1/hosts/{pname}", method="GET"
-    ).respond_with_data(status=404)
-    assert util._host_info_by_name(name, follow_cname=False) is None
+    # No match (404)
+    _host_info_by_name_handler(httpserver, sample_host, is404=True)
+    assert util._host_info_by_name(sample_host["name"], follow_cname=False) is None
 
 
 def test__cname_info_by_name(httpserver: HTTPServer) -> None:

@@ -87,3 +87,41 @@ def sample_ipaddress() -> Dict[str, Any]:
         "ipaddress": "10.0.0.5",
         "host": 172,
     }
+
+
+@pytest.fixture
+def sample_host() -> Dict[str, Any]:
+    return {
+        "id": 172,
+        "ipaddresses": [
+            {
+                "id": 113,
+                "macaddress": "",
+                "created_at": "2020-12-03T17:04:42.990808+01:00",
+                "updated_at": "2020-12-03T17:04:43.622488+01:00",
+                "ipaddress": "10.0.0.5",
+                "host": 172,
+            }
+        ],
+        "cnames": [],
+        "mxs": [],
+        "txts": [
+            {
+                "id": 182,
+                "created_at": "2020-12-03T17:04:42.577372+01:00",
+                "updated_at": "2020-12-03T17:04:42.577400+01:00",
+                "txt": "v=spf1 -all",
+                "host": 172,
+            }
+        ],
+        "ptr_overrides": [],
+        "hinfo": None,
+        "loc": None,
+        "created_at": "2020-12-03T17:04:42.566792+01:00",
+        "updated_at": "2020-12-03T17:04:42.566820+01:00",
+        "name": "foo.example.com",
+        "contact": "",
+        "ttl": None,
+        "comment": "",
+        "zone": 10,
+    }

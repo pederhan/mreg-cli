@@ -9,9 +9,14 @@ See: conftest.py:httpserver fixture.
 
 from typing import Any, Dict, List, Optional
 from pytest_httpserver import HTTPServer
+import urllib.parse
 
 from mreg_cli.util import format_mac
+from mreg_cli import util
 
+###############
+# Module: util
+###############
 
 def cname_exists_handler(
     httpserver: HTTPServer,
@@ -26,6 +31,11 @@ def cname_exists_handler(
     ).respond_with_json({"results": results, "next": next})
 
 
+###############
+# Module: host
+###############
+
+
 def zoneinfo_for_hostname_handler(
     httpserver: HTTPServer,
     hostname: str,
@@ -36,6 +46,53 @@ def zoneinfo_for_hostname_handler(
     httpserver.expect_oneshot_request(
         f"/api/v1/zones/forward/hostname/{hostname}",
     ).respond_with_json(sample_zone, status=status)
+
+
+def _host_info_by_name_handler(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    *,
+    cname: bool = False,
+    is404: bool = False,
+    hostname: Optional[str] = None,  # override hostname in sample_host
+) -> None:
+    if hostname is None:
+        pname = urllib.parse.quote(sample_host["name"])
+    else:
+        pname = urllib.parse.quote(hostname)
+
+    # No match (404)
+    if is404:
+
+        httpserver.expect_oneshot_request(
+            f"/api/v1/hosts/{pname}", method="GET"
+        ).respond_with_data(status=404)
+
+    # Exact match
+    elif not cname:
+        httpserver.expect_oneshot_request(
+            f"/api/v1/hosts/{pname}", method="GET"
+        ).respond_with_json(
+            sample_host,
+        )
+
+    # Match via CNAME lookup
+    else:
+        httpserver.expect_oneshot_request(
+            f"/api/v1/hosts/{pname}", method="GET"
+        ).respond_with_data(
+            status=404
+        )  # Set up 404 response to fall back on CNAME lookup
+
+        # The handler for the CNAME lookup
+        httpserver.expect_oneshot_request(
+            f"/api/v1/hosts/", method="GET", query_string=f"cnames__name={pname}"
+        ).respond_with_json(
+            {
+                "results": [sample_host],
+                "next": None,
+            },
+        )
 
 
 def assoc_mac_to_ip_handler(
