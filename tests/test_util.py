@@ -1,16 +1,17 @@
-from ipaddress import IPv4Address
 import os
 import urllib.parse
+from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import pytest
 import requests
 from _pytest.capture import CaptureFixture
-from _pytest.monkeypatch import MonkeyPatch
 from mreg_cli import util
 from mreg_cli.exceptions import CliError, CliWarning, HostNotFoundWarning
 from pytest_httpserver import HTTPServer
+
+from .handlers import cname_exists_handler
 
 
 def test_set_config() -> None:
@@ -34,9 +35,7 @@ def test_host_exists(
     # Match
     httpserver.expect_oneshot_request("/api/v1/hosts/", method="GET").respond_with_json(
         {
-            "results": [
-                {"name": "foo"},
-            ],
+            "results": [{"name": "foo"}],
             "next": None,
         },
     )
@@ -376,7 +375,7 @@ def test_clean_hostname(
 
 def test_update_token(
     capsys: CaptureFixture[str],
-    monkeypatch: MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch,
     httpserver: HTTPServer,
     tmp_path: Path,
 ) -> None:
@@ -571,19 +570,22 @@ def test_delete(httpserver: HTTPServer) -> None:
 
 def test_cname_exists(httpserver: HTTPServer) -> None:
     # Exists
-    httpserver.expect_oneshot_request(
-        "/api/v1/cnames/",
-        query_string="name=foo-alias.example.com",
-    ).respond_with_json({"results": [{"name": "foo.example.com"}], "next": None})
 
+    cname_exists_handler(
+        httpserver,
+        results=[{"name": "foo.example.com"}],
+        next=None,
+        query_string="name=foo-alias.example.com",
+    )
     assert util.cname_exists("foo-alias.example.com")
 
     # Does not exist
-    httpserver.expect_oneshot_request(
-        "/api/v1/cnames/",
+    cname_exists_handler(
+        httpserver,
+        results=[],
+        next=None,
         query_string="name=foo-alias.example.com",
-    ).respond_with_json({"results": [], "next": None})
-
+    )
     assert not util.cname_exists("foo-alias.example.com")
 
 
