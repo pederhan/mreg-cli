@@ -55,7 +55,6 @@ def get_network_by_ip_handler(
     status: int = 200,
 ) -> None:
     """Handler for util.get_network_by_ip()."""
-    ip = urllib.parse.quote(ip)
     httpserver.expect_oneshot_request(
         f"/api/v1/networks/ip/{ip}", method="GET"
     ).respond_with_json(sample_network, status=status)
