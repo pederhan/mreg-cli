@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from pytest_httpserver import HTTPServer
 import urllib.parse
 
-from mreg_cli.util import format_mac
+from mreg_cli.util import clean_hostname, format_mac
 from mreg_cli import util
 
 ###############
@@ -29,6 +29,36 @@ def cname_exists_handler(
         "/api/v1/cnames/",
         query_string=query_string,
     ).respond_with_json({"results": results, "next": next})
+
+
+def get_network_handler(
+    httpserver: HTTPServer,
+    sample_network: Dict[str, Any],
+    ip: str,
+    is_network: bool,
+    status: int = 200,
+) -> None:
+    """Handler for util.get_network()."""
+    # If we already have a network, use it.
+    if is_network:
+        get_network_by_ip_handler(httpserver, ip, sample_network, status=status)
+    else:
+        httpserver.expect_oneshot_request(
+            f"/api/v1/networks/{urllib.parse.quote(ip)}", method="GET"
+        ).respond_with_json(sample_network, status=status)
+
+
+def get_network_by_ip_handler(
+    httpserver: HTTPServer,
+    ip: str,
+    sample_network: Dict[str, Any],
+    status: int = 200,
+) -> None:
+    """Handler for util.get_network_by_ip()."""
+    ip = urllib.parse.quote(ip)
+    httpserver.expect_oneshot_request(
+        f"/api/v1/networks/ip/{ip}", method="GET"
+    ).respond_with_json(sample_network, status=status)
 
 
 ###############
@@ -63,7 +93,6 @@ def _host_info_by_name_handler(
 
     # No match (404)
     if is404:
-
         httpserver.expect_oneshot_request(
             f"/api/v1/hosts/{pname}", method="GET"
         ).respond_with_data(status=404)
@@ -93,6 +122,19 @@ def _host_info_by_name_handler(
                 "next": None,
             },
         )
+
+
+def resolve_input_name_handler(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    hostname: str,
+    status: int = 200,
+) -> None:
+    """Handler for host.resolve_input_name()."""
+    h = clean_hostname(hostname)
+    httpserver.expect_oneshot_request(
+        f"/api/v1/hosts/", method="GET", query_string=f"name={h}"
+    ).respond_with_json({"results": [sample_host], "next": None}, status=status)
 
 
 def assoc_mac_to_ip_handler(
