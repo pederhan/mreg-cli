@@ -10,7 +10,6 @@ else:
     import abc
     import _collections_abc
     from contextlib import AbstractContextManager
-    from types import GenericAlias
 
     class AbstractAsyncContextManager(abc.ABC):
 
