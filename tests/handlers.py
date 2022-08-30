@@ -40,7 +40,7 @@ def get_network_handler(
 ) -> None:
     """Handler for util.get_network()."""
     # If we already have a network, use it.
-    if is_network:
+    if not is_network:
         get_network_by_ip_handler(httpserver, ip, sample_network, status=status)
     else:
         httpserver.expect_oneshot_request(
