@@ -47,10 +47,7 @@ def test_zoneinfo_for_hostname(
         assert resp is None
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 7),
-    reason="requires python3.7 or higher (contextlib.nullcontext",
-)  # can also use pytest.importorskip("contextlib")
+@requires_nullcontext()
 @pytest.mark.parametrize("force", [True, False])
 @pytest.mark.parametrize("require_zone", [True, False])
 @pytest.mark.parametrize("is404", [True, False])
@@ -93,7 +90,7 @@ def test_check_zone_for_hostname(
         assert "zone" in exc_info.exconly().lower()  # TODO: improve this check?
 
 
-# @pytest.mark.skip("Show mercy...")
+@requires_nullcontext()
 @pytest.mark.parametrize(
     "ip,ipversion,is_network,exception",
     [
