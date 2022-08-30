@@ -1,5 +1,4 @@
 from argparse import Namespace
-from itertools import islice
 import sys
 import urllib.parse
 
@@ -14,7 +13,7 @@ from pytest_httpserver import HTTPServer
 from .handlers import (
     assoc_mac_to_ip_handler,
     cname_exists_handler,
-    resolve_input_name_handler,
+    _get_ip_from_args_handler,
     zoneinfo_for_hostname_handler,
     _host_info_by_name_handler,
 )
@@ -94,9 +93,65 @@ def test_check_zone_for_hostname(
         assert "zone" in exc_info.exconly().lower()  # TODO: improve this check?
 
 
-@pytest.mark.skip("Show mercy...")
-def test__get_ip_from_args() -> None:
-    pass
+# @pytest.mark.skip("Show mercy...")
+@pytest.mark.parametrize(
+    "ip,ipversion,is_network,exception",
+    [
+        ("10.0.1.4", 4, False, None),
+        ("10.0.1.0/24", 4, True, None),
+        ("10.0.1.4", 6, False, CliWarning),
+        ("7593:4588:f58f:f153:167b:86da:1de3:da80", 6, False, None),
+        ("7593:4588:f58f:f153:167b:86da:1de3:da80", 4, False, CliWarning),
+    ],
+)
+@pytest.mark.parametrize("ip_in_use", [True, False])
+@pytest.mark.parametrize("ip_reserved", [True, False])
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("network_frozen", [True, False])
+def test__get_ip_from_args(
+    httpserver: HTTPServer,
+    sample_network: Dict[str, Any],
+    sample_network_ipv6: Dict[str, Any],
+    sample_host: Dict[str, Any],
+    ip: str,
+    ipversion: int,
+    is_network: bool,
+    exception: Optional[Type[Exception]],
+    force: bool,
+    ip_in_use: bool,
+    ip_reserved: bool,
+    network_frozen: bool,
+) -> None:
+    """NOTE: this is an extremely complicated function to test,
+    as it has numerous branches and failure modes.
+
+    We attempt to test each good path extensively, but not every possible failure path.
+    If bug reports for the failure paths are received, we can add them to the test.
+    """
+    if ipversion == 4:
+        net = sample_network
+    else:
+        net = sample_network_ipv6
+
+    _get_ip_from_args_handler(
+        httpserver,
+        sample_network=net,
+        sample_host=sample_host,
+        ip=ip,
+        is_network=is_network,
+        ip_in_use=ip_in_use,
+        ip_reserved=ip_reserved,
+        network_frozen=network_frozen,
+    )
+    ctx = nullcontext()
+    if exception is not None:
+        ctx = pytest.raises(exception)
+    elif network_frozen and not force:
+        ctx = pytest.raises(CliWarning)
+    elif (ip_in_use and not force) and not is_network:
+        ctx = pytest.raises(CliWarning)
+    with ctx:
+        res = host._get_ip_from_args(ip, force, ipversion)
 
 
 @pytest.mark.parametrize(
@@ -385,7 +440,7 @@ def _ip_add_handler(
     #        CliWarning when `follow_cname=True` is passed to it (which is the default)
     #        and the host doesn't exist.
     #
-    #        Passing `host_exist=True` will cause the test to fail
+    #        Passing `host_exist=False` will cause the test to fail
 
     # sample_ipaddress["ipaddress"] = ip
     if not host_has_ip:
@@ -428,8 +483,8 @@ def _ip_add_handler(
     "macaddress", macaddresses(limit=1, with_none=True)
 )  # MAC address and None
 @pytest.mark.parametrize("force", [True, False])
-@pytest.mark.parametrize("host_exists", [True, False])  # Not a CLI arg
-@pytest.mark.parametrize("host_has_ip", [True])  # Not a CLI arg # FIXME: add False
+@pytest.mark.parametrize("host_exists", [True])  # Not a CLI arg  # FIXME: add False
+@pytest.mark.parametrize("host_has_ip", [True, False])  # Not a CLI arg
 @pytest.mark.parametrize("duplicate_ip", [True, False])  # Not a CLI arg
 def test_a_add(
     httpserver: HTTPServer,
