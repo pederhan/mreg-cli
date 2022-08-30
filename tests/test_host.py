@@ -2,8 +2,6 @@ from argparse import Namespace
 import sys
 import urllib.parse
 
-if sys.version_info >= (3, 7):
-    from contextlib import nullcontext
 from typing import Any, Callable, ContextManager, Dict, List, Optional, Type
 
 import pytest
@@ -18,6 +16,7 @@ from .handlers import (
     _host_info_by_name_handler,
 )
 from .utils import requires_nullcontext, macaddresses
+from .compat import nullcontext
 
 
 def mock__get_ip_from_args(
@@ -47,7 +46,6 @@ def test_zoneinfo_for_hostname(
         assert resp is None
 
 
-@requires_nullcontext()
 @pytest.mark.parametrize("force", [True, False])
 @pytest.mark.parametrize("require_zone", [True, False])
 @pytest.mark.parametrize("is404", [True, False])
@@ -90,7 +88,6 @@ def test_check_zone_for_hostname(
         assert "zone" in exc_info.exconly().lower()  # TODO: improve this check?
 
 
-@requires_nullcontext()
 @pytest.mark.parametrize(
     "ip,ipversion,is_network,exception",
     [
@@ -473,7 +470,6 @@ def _ip_add_handler(
     ).respond_with_data(status=201)
 
 
-@requires_nullcontext()
 @pytest.mark.parametrize("name", ["foo.example.com"])
 @pytest.mark.parametrize("ip", ["10.0.1.5", "10.0.1.0/24"])  # IP and CIDR
 @pytest.mark.parametrize(
@@ -524,7 +520,6 @@ def test_a_add(
         host.a_add(args)
 
 
-@requires_nullcontext()
 @pytest.mark.parametrize("name", ["foo.example.com"])
 @pytest.mark.parametrize(
     "ip",
