@@ -47,6 +47,33 @@ def sample_network() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def sample_network_ipv6() -> Dict[str, Any]:
+    return {
+        "id": 66,
+        "excluded_ranges": [
+            {
+                "id": 21,
+                "created_at": "2020-12-03T17:04:23.876818+01:00",
+                "updated_at": "2020-12-03T17:04:23.876855+01:00",
+                "start_ip": "7593:4588:f58f:f153:0000:0000:0000:1234",
+                "end_ip": "7593:4588:f58f:f153:0000:0000:0000:4321",
+                "network": 66,
+            }
+        ],
+        "created_at": "2020-12-03T17:04:23.200211+01:00",
+        "updated_at": "2020-12-03T17:04:23.361019+01:00",
+        "network": "7593:4588:f58f:f153:0000:0000:0000:0000/64",
+        "description": "Frozzzen",
+        "vlan": None,
+        "dns_delegated": False,
+        "category": "",
+        "location": "",
+        "frozen": True,
+        "reserved": 3,
+    }
+
+
+@pytest.fixture
 def sample_zone() -> Dict[str, Any]:
     return {
         "zone": {
