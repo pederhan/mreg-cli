@@ -165,12 +165,41 @@ def assoc_mac_to_ip_handler(
     ).respond_with_data(status=patch_status)
 
 
-# def _get_ip_from_args_handler(
-#     httpserver: HTTPServer,
-#     ip: str,
+def _get_ip_from_args_handler(
+    httpserver: HTTPServer,
+    sample_network: Dict[str, Any],
+    sample_host: Dict[str, Any],
+    ip: str,
+    is_network: bool,
+    ip_in_use: bool,
+    ip_reserved: bool,
+    network_frozen: bool,
+) -> None:
+    """Sets up the HTTP handlers required to test host._get_ip_from_args()
+    depending on the parameters passed in."""
+    # Handler for retrieving host by IP address
+    if not is_network:
+        results = [sample_host] if ip_in_use else []
+        httpserver.expect_request(
+            "/api/v1/hosts/",
+            query_string=f"ipaddresses__ipaddress={urllib.parse.quote(ip)}",
+        ).respond_with_json({"results": results, "next": None})
+    else:
+        # TODO: move to get_network_first_unused_handler
+        unused = sample_host["ipaddresses"][0]["ipaddress"]
+        httpserver.expect_request(
+            f"/api/v1/networks/{ip}/first_unused", method="GET"
+        ).respond_with_json(unused)
 
-#     status: int = 200,
-# ) -> None:
-#     httpserver.expect_oneshot_request(
-#         "/api/v1/ip/",
-#     ).respond_with_json({"ip": ip}, status=status)
+    # Set frozen status
+    sample_network["frozen"] = network_frozen
+
+    # Init handler for util.get_network() calls
+    get_network_handler(httpserver, sample_network, ip=ip, is_network=is_network)
+
+    # TODO: use get_network_reserved_ips handler here instead
+    reserved_ips = [ip] if ip_reserved else []
+    n = sample_network["network"]  # not quite right for IPv6
+    httpserver.expect_oneshot_request(
+        f"/api/v1/networks/{n}/reserved_list", method="GET"
+    ).respond_with_json({"results": reserved_ips, "next": None})
