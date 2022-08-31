@@ -1,8 +1,9 @@
-"""Module that defines HTTPServer handlers for functions used by multiple tests.
+"""Module that defines HTTPServer handlers for functions 
+(and their corresponding endpoints) used by multiple tests.
 
 Since the httpserver fixture passed to these functions is function-scoped,
 it is destroyed after each test. Therefore, we don't need to worry about
-leaking state between tests or having to clean up afterwards.
+leaking state between tests or having to manually clean up afterwards.
 
 See: conftest.py:httpserver fixture.
 """
@@ -170,10 +171,10 @@ def _get_ip_from_args_handler(
     sample_network: Dict[str, Any],
     sample_host: Dict[str, Any],
     ip: str,
-    is_network: bool,
-    ip_in_use: bool,
-    ip_reserved: bool,
-    network_frozen: bool,
+    is_network: bool = False,  # maybe shouldn't be optional
+    ip_in_use: bool = False,
+    ip_reserved: bool = False,
+    network_frozen: bool = False,
 ) -> None:
     """Sets up the HTTP handlers required to test host._get_ip_from_args()
     depending on the parameters passed in."""
@@ -203,3 +204,83 @@ def _get_ip_from_args_handler(
     httpserver.expect_oneshot_request(
         f"/api/v1/networks/{n}/reserved_list", method="GET"
     ).respond_with_json({"results": reserved_ips, "next": None})
+
+
+def _ip_change_handler(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_network: Dict[str, Any],
+    old: str,
+    new: str,
+    force: bool,
+    owns_old_ip: bool,
+    ipversion: int = 4,
+) -> None:
+    # Mock whether or not the host owns the old IP address
+    if owns_old_ip:
+        owned_ip = old
+    else:
+        if ipversion == 4:
+            owned_ip = "192.168.1.1"
+        else:
+            owned_ip = "2001:db8::1"
+    sample_host["ipaddresses"][0]["ipaddress"] = owned_ip
+
+    _host_info_by_name_handler(httpserver, sample_host)
+    _get_ip_from_args_handler(httpserver, sample_network, sample_host, new)
+
+    ip_id = sample_host["ipaddresses"][0]["id"]
+    httpserver.expect_oneshot_request(
+        f"/api/v1/ipaddresses/{ip_id}",
+        method="PATCH",
+        # TODO: body matching
+    ).respond_with_data(status=200)
+
+
+def _ip_move_handler(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    ip: str,
+    from_host: str,
+    to_host: str,
+    use_ptr: bool,
+    host_has_ip: bool,
+) -> None:
+    # TODO: refactor this function.
+    # Consolidate setup blocks into more logical groups.
+    #   - A single block for `use_ptr`
+    #   - A single block for `host_has_ip`
+    #   etc.
+
+    # Set up from_host info
+    from_host_info = sample_host.copy()
+    if use_ptr:
+        from_host_info["ptr_overrides"][0]["ipaddress"] = ip
+    else:
+        from_host_info["ipaddresses"][0]["ipaddress"] = ip
+
+    # Set up to_host info
+    to_host_info = sample_host.copy()
+    to_host_info["name"] = to_host
+
+    # Remove PTR override from from_host info and set up ipaddress handler
+    if not use_ptr:
+        from_host_info["ipaddresses"][0]["ptr_overrides"] = []
+        ip_id = from_host_info["ipaddresses"][0]["id"]
+        httpserver.expect_oneshot_request(
+            f"/api/v1/ipaddresses/{ip_id}", method="PATCH"
+        ).respond_with_data(status=200)
+    # Otherwise use PTR override and set up PTR override handler
+    else:
+        ptr_id = from_host_info["ptr_overrides"][0]["id"]
+        httpserver.expect_oneshot_request(
+            f"/api/v1/ptroverrides/{ptr_id}", method="PATCH"
+        ).respond_with_data(status=200)
+
+    # Remove IP address from from_host to trigger warning
+    if not host_has_ip:
+        from_host_info["ipaddresses"] = []
+
+    # TODO: use expect_ordered_request
+    _host_info_by_name_handler(httpserver, from_host_info)
+    _host_info_by_name_handler(httpserver, to_host_info)

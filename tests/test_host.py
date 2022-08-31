@@ -9,6 +9,8 @@ from mreg_cli import host, util
 from mreg_cli.exceptions import CliWarning, HostNotFoundWarning
 from pytest_httpserver import HTTPServer
 from .handlers import (
+    _ip_change_handler,
+    _ip_move_handler,
     assoc_mac_to_ip_handler,
     cname_exists_handler,
     _get_ip_from_args_handler,
@@ -279,6 +281,7 @@ def test_add(
 @pytest.mark.parametrize("cnames", [[], ["foo-c.example.com"]])
 @pytest.mark.parametrize("has_srv", [True, False])
 @pytest.mark.parametrize("has_natpr", [True, False])
+@pytest.mark.parametrize("has_ptr_override", [True, False])
 def test_remove(
     httpserver: HTTPServer,
     sample_host: Dict[str, Any],
@@ -288,11 +291,14 @@ def test_remove(
     cnames: List[str],
     has_srv: bool,
     has_natpr: bool,
+    has_ptr_override: bool,
 ) -> None:
     """Remove a host from the zone."""
     args = Namespace(name=sample_host["name"], force=force)
 
     sample_host["cnames"] = cnames
+    if not has_ptr_override:
+        sample_host["ptr_overrides"] = []
     _host_info_by_name_handler(httpserver, sample_host)
 
     # DELETE handler
@@ -312,7 +318,8 @@ def test_remove(
         {"results": srv_results, "next": None}
     )
 
-    if (cnames or has_srv or has_natpr) and not force:
+    # TODO: add warning message tests
+    if (cnames or has_srv or has_natpr or has_ptr_override) and not force:
         with pytest.raises(CliWarning):
             host.remove(args)
     else:
@@ -432,7 +439,7 @@ def _ip_add_handler(
     # FIXME: _ip_add() will never succeed if the host doesn't exist.
     #        This is a bug caused by util.host_info_by_name() raising
     #        CliWarning when `follow_cname=True` is passed to it (which is the default)
-    #        and the host doesn't exist.
+    #        and the endpoint doesn't exist.
     #
     #        Passing `host_exist=False` will cause the test to fail
 
@@ -453,15 +460,22 @@ def _ip_add_handler(
         hostname=name,
     )
     if not host_exists:
+        # CNAME handler (no results)
+        httpserver.expect_oneshot_request(
+            "/api/v1/hosts/", method="GET", query_string=f"cnames__name={name}"
+        ).respond_with_json({"results": [], "next": None})
+
+        # Create host handler
         httpserver.expect_oneshot_request(
             f"/api/v1/hosts/",
             method="POST",
             # data=f"name={urllib.parse.quote_plus(name)}&ipaddress={urllib.parse.quote_plus(ipaddress)}",
         ).respond_with_data(status=201)
+
     if macaddress is not None:
         httpserver.expect_oneshot_request(
             f"/api/v1/hosts/{name}", method="GET"
-        ).respond_with_json({"ipaddresses": sample_host["ipaddresses"]})
+        ).respond_with_json({"ipaddresses": [sample_ipaddress]})
         assoc_mac_to_ip_handler(httpserver, macaddress, sample_ipaddress)
     # else:
     # TODO: add body matching
@@ -510,6 +524,7 @@ def test_a_add(
     # TODO: refactor to reduce code duplication between this and test_aaaa_add()
     ctx = nullcontext()  # type: ContextManager[Optional[Any]]
     msg = ""
+
     if host_has_ip and not force:
         ctx = pytest.raises(CliWarning)
     elif (
@@ -573,3 +588,165 @@ def test_aaaa_add(
         ctx = pytest.raises(CliWarning)
     with ctx as exc_info:
         host.aaaa_add(args)
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("old", ["10.0.1.4"])
+@pytest.mark.parametrize("new", ["10.0.1.4", "10.0.1.5"])
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("owns_old_ip", [True, False])  # Not a CLI arg
+def test_a_change(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_network: Dict[str, Any],
+    name: str,
+    old: str,
+    new: str,
+    force: bool,
+    owns_old_ip: bool,
+) -> None:
+    args = Namespace(name=name, old=old, new=new, force=force)
+
+    _ip_change_handler(
+        httpserver,
+        sample_host,
+        sample_network,
+        old,
+        new,
+        force,
+        owns_old_ip,
+        ipversion=4,
+    )
+
+    ctx = nullcontext()
+    msg = ""
+
+    if old == new:
+        ctx = pytest.raises(CliWarning)
+        msg = "equal"
+    elif not owns_old_ip:
+        ctx = pytest.raises(CliWarning)
+        msg = "not owned"
+    with ctx as exc_info:
+        host.a_change(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("old", ["7593:4588:f58f:f153:DEAD:BEEF:1234:1234"])
+@pytest.mark.parametrize(
+    "new",
+    [
+        "7593:4588:f58f:f153:DEAD:BEEF:1234:1234",
+        "7593:4588:f58f:f153:BEEF:BEEF:1234:1234",
+    ],
+)
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("owns_old_ip", [True, False])  # Not a CLI arg
+def test_aaaa_change(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_network_ipv6: Dict[str, Any],
+    name: str,
+    old: str,
+    new: str,
+    force: bool,
+    owns_old_ip: bool,
+) -> None:
+    """Just like test_a_change, but for AAAA records.
+
+    Almost fully copy-pasted to reduce complexity of these tests.
+    """
+    args = Namespace(name=name, old=old, new=new, force=force)
+
+    _ip_change_handler(
+        httpserver,
+        sample_host,
+        sample_network_ipv6,
+        old,
+        new,
+        force,
+        owns_old_ip,
+        ipversion=4,
+    )
+
+    ctx = nullcontext()
+    msg = ""
+
+    if old == new:
+        ctx = pytest.raises(CliWarning)
+        msg = "equal"
+    elif not owns_old_ip:
+        ctx = pytest.raises(CliWarning)
+        msg = "not owned"
+    with ctx as exc_info:
+        host.aaaa_change(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("ip", ["10.0.1.4"])
+@pytest.mark.parametrize("from_host", ["foo.example.com"])
+@pytest.mark.parametrize("to_host", ["bar.example.com"])
+@pytest.mark.parametrize("use_ptr", [True, False])
+@pytest.mark.parametrize("host_has_ip", [True, False])  # Not a CLI arg
+def test_a_move(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    ip: str,
+    from_host: str,
+    to_host: str,
+    use_ptr: bool,
+    host_has_ip: bool,
+) -> None:
+    args = Namespace(ip=ip, fromhost=from_host, tohost=to_host)
+
+    _ip_move_handler(
+        httpserver, sample_host, ip, from_host, to_host, use_ptr, host_has_ip
+    )
+    ctx = nullcontext()
+    msg = ""
+
+    if not host_has_ip and not use_ptr:
+        ctx = pytest.raises(CliWarning)
+        msg = "no ip"
+    with ctx as exc_info:
+        host.a_move(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("ip", ["7593:4588:f58f:f153:DEAD:BEEF:1234:1234"])
+@pytest.mark.parametrize("from_host", ["foo.example.com"])
+@pytest.mark.parametrize("to_host", ["bar.example.com"])
+@pytest.mark.parametrize("use_ptr", [True, False])
+@pytest.mark.parametrize("host_has_ip", [True, False])  # Not a CLI arg
+def test_aaaa_move(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    ip: str,
+    from_host: str,
+    to_host: str,
+    use_ptr: bool,
+    host_has_ip: bool,
+) -> None:
+    args = Namespace(ip=ip, fromhost=from_host, tohost=to_host)
+
+    _ip_move_handler(
+        httpserver, sample_host, ip, from_host, to_host, use_ptr, host_has_ip
+    )
+    ctx = nullcontext()
+    msg = ""
+
+    if not host_has_ip and not use_ptr:
+        ctx = pytest.raises(CliWarning)
+        msg = "no ip"
+    with ctx as exc_info:
+        host.aaaa_move(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
