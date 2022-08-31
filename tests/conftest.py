@@ -117,31 +117,52 @@ def sample_ipaddress() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_host() -> Dict[str, Any]:
+def sample_ipaddress_ipv6() -> Dict[str, Any]:
+    return {
+        "id": 113,
+        "macaddress": "28:85:B1:60:54:DC",
+        "created_at": "2020-12-03T17:04:42.990808+01:00",
+        "updated_at": "2020-12-03T17:04:42.990836+01:00",
+        "ipaddress": "7593:4588:f58f:f153:DEAD:BEEF:1234:1234",
+        "host": 172,
+    }
+
+
+@pytest.fixture
+def sample_txt() -> Dict[str, Any]:
+    return {
+        "id": 182,
+        "created_at": "2020-12-03T17:04:42.577372+01:00",
+        "updated_at": "2020-12-03T17:04:42.577400+01:00",
+        "txt": "v=spf1 -all",
+        "host": 172,
+    }
+
+
+@pytest.fixture
+def sample_ptr_override() -> Dict[str, Any]:
+    return {
+        "id": 11,
+        "created_at": "2020-12-03T17:04:56.898974+01:00",
+        "updated_at": "2020-12-03T17:04:56.899005+01:00",
+        "ipaddress": "10.0.0.20",
+        "host": 174,
+    }
+
+
+@pytest.fixture
+def sample_host(
+    sample_ipaddress: Dict[str, Any],
+    sample_ptr_override: Dict[str, Any],
+    sample_txt: Dict[str, Any],
+) -> Dict[str, Any]:
     return {
         "id": 172,
-        "ipaddresses": [
-            {
-                "id": 113,
-                "macaddress": "",
-                "created_at": "2020-12-03T17:04:42.990808+01:00",
-                "updated_at": "2020-12-03T17:04:43.622488+01:00",
-                "ipaddress": "10.0.0.5",
-                "host": 172,
-            }
-        ],
+        "ipaddresses": [sample_ipaddress],
         "cnames": [],  # TODO: add cnames
         "mxs": [],  # TODO: add MX records
-        "txts": [
-            {
-                "id": 182,
-                "created_at": "2020-12-03T17:04:42.577372+01:00",
-                "updated_at": "2020-12-03T17:04:42.577400+01:00",
-                "txt": "v=spf1 -all",
-                "host": 172,
-            }
-        ],
-        "ptr_overrides": [],  # TODO: add ptr_overrides
+        "txts": [sample_txt],
+        "ptr_overrides": [sample_ptr_override],
         "hinfo": None,
         "loc": None,
         "created_at": "2020-12-03T17:04:42.566792+01:00",
