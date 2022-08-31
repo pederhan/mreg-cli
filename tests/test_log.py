@@ -11,6 +11,7 @@ def test__write_log(tmp_path: Path, logfile: Optional[str]) -> None:
         log.logfile = None
         log._write_log("line 1")
         # Nothing happens
+        assert log.logfile is None
         return
 
     f = tmp_path / logfile
