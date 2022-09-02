@@ -146,7 +146,7 @@ def sample_ptr_override() -> Dict[str, Any]:
         "created_at": "2020-12-03T17:04:56.898974+01:00",
         "updated_at": "2020-12-03T17:04:56.899005+01:00",
         "ipaddress": "10.0.0.20",
-        "host": 174,
+        "host": 172,
     }
 
 
@@ -164,21 +164,57 @@ def sample_cname() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def sample_hinfo() -> Dict[str, Any]:
+    return {
+        "host": 172,
+        "created_at": "2020-12-03T17:04:54.598153+01:00",
+        "updated_at": "2020-12-03T17:04:54.598180+01:00",
+        "cpu": "x86",
+        "os": "Win",
+    }
+
+
+@pytest.fixture
+def sample_loc() -> Dict[str, Any]:
+    return {
+        "host": 172,
+        "created_at": "2020-12-03T17:04:55.056897+01:00",
+        "updated_at": "2020-12-03T17:04:55.056927+01:00",
+        "loc": "52 22 23.000 N 4 53 32.000 E -2.00m 0.00m 10000m 10m",
+    }
+
+
+@pytest.fixture
+def sample_mx() -> Dict[str, Any]:
+    return {
+        "id": 11,
+        "created_at": "2020-12-03T17:04:55.492630+01:00",
+        "updated_at": "2020-12-03T17:04:55.492659+01:00",
+        "priority": 10,
+        "mx": "mail.example.org",
+        "host": 172,
+    }
+
+
+@pytest.fixture
 def sample_host(
     sample_ipaddress: Dict[str, Any],
     sample_ptr_override: Dict[str, Any],
     sample_txt: Dict[str, Any],
     sample_cname: Dict[str, Any],
+    sample_hinfo: Dict[str, Any],
+    sample_loc: Dict[str, Any],
+    sample_mx: Dict[str, Any],
 ) -> Dict[str, Any]:
     return {
         "id": 172,
         "ipaddresses": [sample_ipaddress],
         "cnames": [sample_cname],
-        "mxs": [],  # TODO: add MX records
+        "mxs": [sample_mx],
         "txts": [sample_txt],
         "ptr_overrides": [sample_ptr_override],
-        "hinfo": None,
-        "loc": None,
+        "hinfo": sample_hinfo,
+        "loc": sample_loc,
         "created_at": "2020-12-03T17:04:42.566792+01:00",
         "updated_at": "2020-12-03T17:04:42.566820+01:00",
         "name": "foo.example.com",
@@ -201,7 +237,7 @@ def sample_naptr() -> Dict[str, Any]:
         "service": "sip",
         "regex": "[abc]+",
         "replacement": "wonk",
-        "host": 174,
+        "host": 172,
     }
 
 
@@ -217,5 +253,5 @@ def sample_srv() -> Dict[str, Any]:
         "port": 3456,
         "ttl": None,
         "zone": 10,
-        "host": 174,
+        "host": 172,
     }
