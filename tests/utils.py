@@ -1,6 +1,7 @@
 import sys
-from typing import Iterable, Optional, overload
+from typing import Any, Dict, Iterable, Optional, overload
 from typing_extensions import Literal
+from mreg_cli import host
 
 import pytest
 
@@ -48,3 +49,20 @@ def is_py36() -> bool:
 requires_nullcontext = pytest.mark.skipif(
     is_py36(), reason="contextlib.nullcontext is required to run the test"
 )
+
+
+def patch__get_ip_from_args(
+    monkeypatch: pytest.MonkeyPatch, sample_ipaddress: Dict[str, Any]
+) -> Any:  # terrible annotation
+    return monkeypatch.setattr(
+        host, "_get_ip_from_args", mock__get_ip_from_args(sample_ipaddress)
+    )
+
+
+def mock__get_ip_from_args(
+    sample_ipaddress: Dict[str, Any]
+) -> Any:  # terrible annotation
+    def func(ip: str, force: bool, ipversion: Optional[int] = None) -> Dict[str, Any]:
+        return sample_ipaddress["ipaddress"]
+
+    return func
