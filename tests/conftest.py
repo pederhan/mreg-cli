@@ -151,15 +151,29 @@ def sample_ptr_override() -> Dict[str, Any]:
 
 
 @pytest.fixture
+def sample_cname() -> Dict[str, Any]:
+    return {
+        "id": 11,
+        "created_at": "2020-12-03T17:04:54.156765+01:00",
+        "updated_at": "2020-12-03T17:04:54.156793+01:00",
+        "name": "bar.example.com",
+        "ttl": None,
+        "zone": 10,
+        "host": 173,
+    }
+
+
+@pytest.fixture
 def sample_host(
     sample_ipaddress: Dict[str, Any],
     sample_ptr_override: Dict[str, Any],
     sample_txt: Dict[str, Any],
+    sample_cname: Dict[str, Any],
 ) -> Dict[str, Any]:
     return {
         "id": 172,
         "ipaddresses": [sample_ipaddress],
-        "cnames": [],  # TODO: add cnames
+        "cnames": [sample_cname],
         "mxs": [],  # TODO: add MX records
         "txts": [sample_txt],
         "ptr_overrides": [sample_ptr_override],
