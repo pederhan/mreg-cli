@@ -422,76 +422,17 @@ def test_set_contact(
     host.set_contact(args)
 
 
-def _ip_add_handler(
-    httpserver: HTTPServer,
-    monkeypatch: pytest.MonkeyPatch,
-    sample_ipaddress: Dict[str, Any],
-    sample_host: Dict[str, Any],
-    name: str,
-    ip: str,
-    macaddress: Optional[str],
-    force: bool,
-    host_exists: bool,
-    host_has_ip: bool,
-    duplicate_ip: bool,
-) -> None:
-
-    # FIXME: _ip_add() will never succeed if the host doesn't exist.
-    #        This is a bug caused by util.host_info_by_name() raising
-    #        CliWarning when `follow_cname=True` is passed to it (which is the default)
-    #        and the endpoint doesn't exist.
-    #
-    #        Passing `host_exist=False` will cause the test to fail
-
-    # sample_ipaddress["ipaddress"] = ip
-    if not host_has_ip:
-        sample_host["ipaddresses"] = []
-    elif duplicate_ip:
-        sample_host["ipaddresses"] = [sample_ipaddress]
-
-    monkeypatch.setattr(
-        host, "_get_ip_from_args", mock__get_ip_from_args(sample_ipaddress)
-    )
-    # resolve_input_name_handler(httpserver, sample_host, name)
-    _host_info_by_name_handler(
-        httpserver,
-        sample_host if host_exists else None,  # type: ignore
-        cname=True,
-        hostname=name,
-    )
-    if not host_exists:
-        # CNAME handler (no results)
-        httpserver.expect_oneshot_request(
-            "/api/v1/hosts/", method="GET", query_string=f"cnames__name={name}"
-        ).respond_with_json({"results": [], "next": None})
-
-        # Create host handler
-        httpserver.expect_oneshot_request(
-            f"/api/v1/hosts/",
-            method="POST",
-            # data=f"name={urllib.parse.quote_plus(name)}&ipaddress={urllib.parse.quote_plus(ipaddress)}",
-        ).respond_with_data(status=201)
-
-    if macaddress is not None:
-        httpserver.expect_oneshot_request(
-            f"/api/v1/hosts/{name}", method="GET"
-        ).respond_with_json({"ipaddresses": [sample_ipaddress]})
-        assoc_mac_to_ip_handler(httpserver, macaddress, sample_ipaddress)
-    # else:
-    # TODO: add body matching
-    httpserver.expect_oneshot_request(
-        "/api/v1/ipaddresses/", method="POST"
-    ).respond_with_data(status=201)
-
-
 @pytest.mark.parametrize("name", ["foo.example.com"])
-@pytest.mark.parametrize("ip", ["10.0.1.5", "10.0.1.0/24"])  # IP and CIDR
+@pytest.mark.parametrize("ip", ["10.0.0.5", "10.0.1.0/24"])  # IP and CIDR
 @pytest.mark.parametrize(
     "macaddress", macaddresses(limit=1, with_none=True)
 )  # MAC address and None
 @pytest.mark.parametrize("force", [True, False])
-@pytest.mark.parametrize("host_exists", [True])  # Not a CLI arg  # FIXME: add False
+@pytest.mark.parametrize(
+    "host_exists", [True, False]
+)  # Not a CLI arg  # FIXME: add False
 @pytest.mark.parametrize("host_has_ip", [True, False])  # Not a CLI arg
+@pytest.mark.parametrize("host_has_mac", [True, False])  # Not a CLI arg
 @pytest.mark.parametrize("duplicate_ip", [True, False])  # Not a CLI arg
 def test_a_add(
     httpserver: HTTPServer,
@@ -504,35 +445,24 @@ def test_a_add(
     force: bool,
     host_exists: bool,
     host_has_ip: bool,
+    host_has_mac: bool,
     duplicate_ip: bool,
 ) -> None:
-    _ip_add_handler(
+    do_test_ip_add(
         httpserver,
         monkeypatch,
         sample_ipaddress,
         sample_host,
         name,
         ip,
-        macaddress,
-        force,
-        host_exists,
-        host_has_ip,
-        duplicate_ip,
+        macaddress=macaddress,
+        force=force,
+        host_exists=host_exists,
+        host_has_ip=host_has_ip,
+        host_has_mac=host_has_mac,
+        duplicate_ip=duplicate_ip,
+        ipversion=4,
     )
-    args = Namespace(name=name, ip=ip, macaddress=macaddress, force=force)
-
-    # TODO: refactor to reduce code duplication between this and test_aaaa_add()
-    ctx = nullcontext()  # type: ContextManager[Optional[Any]]
-    msg = ""
-
-    if host_has_ip and not force:
-        ctx = pytest.raises(CliWarning)
-    elif (
-        sample_host["ipaddresses"] and ip == sample_host["ipaddresses"][0]["ipaddress"]
-    ):
-        ctx = pytest.raises(CliWarning)
-    with ctx as exc_info:
-        host.a_add(args)
 
 
 @pytest.mark.parametrize("name", ["foo.example.com"])

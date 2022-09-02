@@ -8,12 +8,15 @@ leaking state between tests or having to manually clean up afterwards.
 See: conftest.py:httpserver fixture.
 """
 
-from typing import Any, Dict, List, Optional
-from pytest_httpserver import HTTPServer
 import urllib.parse
+from typing import Any, Dict, List, Optional
 
-from mreg_cli.util import clean_hostname, format_mac
+import pytest
 from mreg_cli import util
+from mreg_cli.util import clean_hostname, format_mac
+from pytest_httpserver import HTTPServer
+
+from .utils import patch__get_ip_from_args
 
 ###############
 # Module: util
@@ -21,8 +24,8 @@ from mreg_cli import util
 
 def cname_exists_handler(
     httpserver: HTTPServer,
-    results: List[Dict[str, Any]],
-    next: Optional[str],
+    results: List[Dict[str, Any]] = [],  # mutable default, don't touch
+    next: Optional[str] = None,
     query_string: Optional[str] = None,
 ) -> None:
     """Handler for util.cname_exists()."""
@@ -204,6 +207,66 @@ def _get_ip_from_args_handler(
     httpserver.expect_oneshot_request(
         f"/api/v1/networks/{n}/reserved_list", method="GET"
     ).respond_with_json({"results": reserved_ips, "next": None})
+
+
+def _ip_add_handler(
+    httpserver: HTTPServer,
+    monkeypatch: pytest.MonkeyPatch,
+    sample_ipaddress: Dict[str, Any],
+    sample_host: Dict[str, Any],
+    name: str,
+    ip: str,
+    macaddress: Optional[str] = None,
+    force: bool = False,
+    host_exists: bool = True,
+    host_has_ip: bool = False,
+    host_has_mac: bool = False,  # unused
+    duplicate_ip: bool = False,
+) -> None:
+    # sample_ipaddress["ipaddress"] = ip
+    if not host_has_ip:
+        sample_host["ipaddresses"] = []
+    elif duplicate_ip:
+        sample_host["ipaddresses"] = [sample_ipaddress]
+
+    patch__get_ip_from_args(monkeypatch, sample_ipaddress)
+
+    # resolve_input_name_handler(httpserver, sample_host, name)
+    _host_info_by_name_handler(
+        httpserver,
+        sample_host if host_exists else None,  # type: ignore
+        cname=True,
+        hostname=name,
+    )
+    if not host_exists:
+        # CNAME handler (no results)
+        httpserver.expect_oneshot_request(
+            "/api/v1/hosts/", method="GET", query_string=f"cnames__name={name}"
+        ).respond_with_json({"results": [], "next": None})
+
+        # Create host handler
+        httpserver.expect_oneshot_request(
+            f"/api/v1/hosts/",
+            method="POST",
+            # data=f"name={urllib.parse.quote_plus(name)}&ipaddress={urllib.parse.quote_plus(ipaddress)}",
+        ).respond_with_data(status=201)
+
+    if macaddress is not None:
+        # Remove MAC addresses from sample host and IP if they exist
+        if not host_has_mac:
+            sample_ipaddress["macaddress"] = []
+            if host_has_ip:
+                sample_host["ipaddresses"][0]["macaddress"] = []
+
+        httpserver.expect_oneshot_request(
+            f"/api/v1/hosts/{name}", method="GET"
+        ).respond_with_json({"ipaddresses": [sample_ipaddress]})
+        assoc_mac_to_ip_handler(httpserver, macaddress, sample_ipaddress)
+    # else:
+    # TODO: add body matching
+    httpserver.expect_oneshot_request(
+        "/api/v1/ipaddresses/", method="POST"
+    ).respond_with_data(status=201)
 
 
 def _ip_change_handler(
