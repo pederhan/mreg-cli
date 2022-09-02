@@ -1,4 +1,5 @@
 from argparse import Namespace
+from site import venv
 import sys
 import urllib.parse
 
@@ -6,7 +7,7 @@ from typing import Any, Callable, ContextManager, Dict, List, Optional, Type
 
 import pytest
 from mreg_cli import host, util
-from mreg_cli.exceptions import CliWarning, HostNotFoundWarning
+from mreg_cli.exceptions import CliError, CliWarning, HostNotFoundWarning
 from pytest_httpserver import HTTPServer
 from .handlers import (
     _ip_change_handler,
@@ -16,18 +17,17 @@ from .handlers import (
     _get_ip_from_args_handler,
     zoneinfo_for_hostname_handler,
     _host_info_by_name_handler,
+    _ip_add_handler,
 )
-from .utils import requires_nullcontext, macaddresses
+from .utils import (
+    patch__get_ip_from_args,
+    requires_nullcontext,
+    macaddresses,
+)
 from .compat import nullcontext
 
 
-def mock__get_ip_from_args(
-    sample_ipaddress: Dict[str, Any]
-) -> Any:  # terrible annotation
-    def func(ip: str, force: bool, ipversion: Optional[int] = None) -> Dict[str, Any]:
-        return sample_ipaddress["ipaddress"]
 
-    return func
 
 
 @pytest.mark.parametrize(
@@ -225,6 +225,9 @@ def test_add(
     def mock_resolve_input_name(name: str) -> str:
         raise HostNotFoundWarning
 
+    # TODO: replace monkeypatch with better mocking
+    # Mocking this until we have a proper test for _get_ip_from_args()
+    patch__get_ip_from_args(monkeypatch, sample_ipaddress)
     monkeypatch.setattr(host, "resolve_input_name", mock_resolve_input_name)
 
     zoneinfo_for_hostname_handler(
@@ -234,13 +237,6 @@ def test_add(
     # Mock that the name doesn't exist
     # TODO: add query string matching for this
     cname_exists_handler(httpserver, [], None)
-
-    # TODO: replace monkeypatch with better mocking
-    # Mocking this until we have a proper test for _get_ip_from_args()
-
-    monkeypatch.setattr(
-        host, "_get_ip_from_args", mock__get_ip_from_args(sample_ipaddress)
-    )
 
     # Create host handler
     httpserver.expect_oneshot_request(
@@ -479,6 +475,7 @@ def test_a_add(
 @pytest.mark.parametrize("force", [True, False])
 @pytest.mark.parametrize("host_exists", [True])  # Not a CLI arg
 @pytest.mark.parametrize("host_has_ip", [True, False])  # Not a CLI arg
+@pytest.mark.parametrize("host_has_mac", [False])  # Not a CLI arg
 @pytest.mark.parametrize("duplicate_ip", [True, False])  # Not a CLI arg
 def test_aaaa_add(
     httpserver: HTTPServer,
@@ -491,8 +488,46 @@ def test_aaaa_add(
     force: bool,
     host_exists: bool,
     host_has_ip: bool,
+    host_has_mac: bool,
     duplicate_ip: bool,
 ) -> None:
+    do_test_ip_add(
+        httpserver,
+        monkeypatch,
+        sample_ipaddress,
+        sample_host,
+        name,
+        ip,
+        macaddress=macaddress,
+        force=force,
+        host_exists=host_exists,
+        host_has_ip=host_has_ip,
+        host_has_mac=host_has_mac,
+        duplicate_ip=duplicate_ip,
+        ipversion=6,
+    )
+
+
+def do_test_ip_add(
+    httpserver: HTTPServer,
+    monkeypatch: pytest.MonkeyPatch,
+    sample_ipaddress: Dict[str, Any],
+    sample_host: Dict[str, Any],
+    name: str,
+    ip: str,
+    macaddress: Optional[str],
+    force: bool,
+    host_exists: bool,
+    host_has_ip: bool,
+    host_has_mac: bool,
+    duplicate_ip: bool,
+    ipversion: int,  # what decides which function is tested
+) -> None:
+    """Tests either host.a_add() or host.aaaa_add() depending on `ipversion`."""
+    # NOTE: this is a very complex and long test function due to the
+    # many different combinations of parameters that need to be tested, and their
+    # different behaviors.
+
     _ip_add_handler(
         httpserver,
         monkeypatch,
@@ -500,25 +535,44 @@ def test_aaaa_add(
         sample_host,
         name,
         ip,
-        macaddress,
-        force,
-        host_exists,
-        host_has_ip,
-        duplicate_ip,
+        macaddress=macaddress,
+        force=force,
+        host_exists=host_exists,
+        host_has_ip=host_has_ip,
+        host_has_mac=host_has_mac,
+        duplicate_ip=duplicate_ip,
     )
     args = Namespace(name=name, ip=ip, macaddress=macaddress, force=force)
 
     ctx = nullcontext()  # type: ContextManager[Optional[Any]]
     msg = ""
-    if host_has_ip and not force:
-        ctx = pytest.raises(CliWarning)
-    elif (
-        sample_host["ipaddresses"] and ip == sample_host["ipaddresses"][0]["ipaddress"]
-    ):
-        ctx = pytest.raises(CliWarning)
-    with ctx as exc_info:
-        host.aaaa_add(args)
 
+    # _ip_add has 2 fundamentally different branches: host exists/doesn't exist
+    if host_exists:
+        # top level `if not force`?
+        if host_has_ip and not force:
+            ctx = pytest.raises(CliWarning)
+            msg = "A/AAAA record"
+        elif host_has_ip and ip == sample_host["ipaddresses"][0]["ipaddress"]:
+            ctx = pytest.raises(CliWarning)
+            msg = "already has IP"
+    else:
+        if macaddress is not None and host_has_mac and not force:
+            ctx = pytest.raises(CliWarning)
+            msg = "has existing mac"
+
+    if ipversion == 4:
+        func = host.a_add
+    elif ipversion == 6:
+        func = host.aaaa_add
+    else:
+        raise ValueError(f"invalid ipversion: {ipversion}")
+
+    with ctx as exc_info:
+        func(args)
+
+    if exc_info is not None:
+        assert msg.lower() in exc_info.exconly().lower()
 
 @pytest.mark.parametrize("name", ["foo.example.com"])
 @pytest.mark.parametrize("old", ["10.0.1.4"])
@@ -585,10 +639,10 @@ def test_aaaa_change(
     force: bool,
     owns_old_ip: bool,
 ) -> None:
-    """Just like test_a_change, but for AAAA records.
+    """Just like test_a_change, but for AAAA records."""
 
-    Almost fully copy-pasted to reduce complexity of these tests.
-    """
+    # TODO: refactor this to reduce duplication with test_a_change
+
     args = Namespace(name=name, old=old, new=new, force=force)
 
     _ip_change_handler(
@@ -680,3 +734,437 @@ def test_aaaa_move(
 
     if exc_info:
         assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("ip", ["10.0.0.5"])
+@pytest.mark.parametrize("owns_ip", [True, False])  # Not a CLI arg # HOST_owns_ip?
+def test_a_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    ip: str,
+    owns_ip: bool,
+) -> None:
+    do_test_ip_remove(httpserver, sample_host, name, ip, owns_ip, ipversion=4)
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("ip", ["7593:4588:f58f:f153:dead:beef:1234:1234"])
+@pytest.mark.parametrize("owns_ip", [True, False])  # Not a CLI arg # HOST_owns_ip?
+def test_aaaa_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    ip: str,
+    owns_ip: bool,
+) -> None:
+    # NOTE: host._ip_remove checks rec["ipaddress"] == args.ip.lower()
+    # which will fail if the record returned by the API has uppercase IPv6
+    # Maybe we should fix that?
+    do_test_ip_remove(httpserver, sample_host, name, ip, owns_ip, ipversion=6)
+
+
+def do_test_ip_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    ip: str,
+    owns_ip: bool,
+    ipversion: int,
+) -> None:
+    """Tests host.a_remove() and host.aaaa_remove()."""
+    args = Namespace(name=name, ip=ip)
+
+    if owns_ip:
+        sample_host["ipaddresses"][0]["ipaddress"] = ip
+    else:
+        # To simulate this, we remove the IP from the host
+        # this should be the same as if the host doesn't own the IP
+        #
+        # TODO: add another IP to the host to verify this claim
+        sample_host["ipaddresses"] = []  # host owns no IPs
+
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    msg = ""
+    if owns_ip:
+        ip_id = sample_host["ipaddresses"][0]["id"]
+        httpserver.expect_oneshot_request(
+            f"/api/v1/ipaddresses/{ip_id}", method="DELETE"
+        ).respond_with_data(status=204)
+        ctx = nullcontext()
+    else:
+        ctx = pytest.raises(CliWarning)
+        msg = "not owned"
+
+    if ipversion == 4:
+        func = host.a_remove
+    elif ipversion == 6:
+        func = host.aaaa_remove
+    else:
+        raise ValueError(f"Invalid IP version: {ipversion}")
+
+    with ctx as exc_info:
+        func(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("alias", ["bar.example.com"])
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("host_has_cname", [True, False])
+@pytest.mark.parametrize("cname_in_use", [True, False])
+def test_cname_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_zone: Dict[str, Any],
+    name: str,
+    alias: str,
+    force: bool,
+    host_has_cname: bool,
+    cname_in_use: bool,
+) -> None:
+    _host_info_by_name_handler(httpserver, sample_host)
+    alias_info = sample_host.copy()
+    alias_info["name"] = alias
+
+    if host_has_cname:
+        _host_info_by_name_handler(httpserver, alias_info, cname=True)
+    else:
+        _host_info_by_name_handler(httpserver, None, cname=True, hostname=alias)
+
+    if cname_in_use:
+        results = [sample_host]
+    else:
+        results = []
+
+    cname_exists_handler(httpserver, results)
+    zoneinfo_for_hostname_handler(httpserver, alias, sample_zone)
+
+    httpserver.expect_oneshot_request(
+        "/api/v1/cnames/", method="POST"
+    ).respond_with_data(status=201)
+
+    args = Namespace(name=name, alias=alias, force=force)
+    ctx = nullcontext()
+    msg = ""
+
+    if host_has_cname:
+        msg = "host"
+        ctx = pytest.raises(CliError)
+    elif cname_in_use:
+        msg = "already in use"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.cname_add(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("alias", ["bar.example.com"])
+@pytest.mark.parametrize("host_has_cname", [True, False])
+def test_cname_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    alias: str,
+    host_has_cname: bool,
+) -> None:
+    # Remove or set cname based on parametrization
+    if host_has_cname:
+        sample_host["cnames"][0]["name"] = alias
+    else:
+        sample_host["cnames"] = []
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    # Delete CNAME handler
+    httpserver.expect_oneshot_request(
+        f"/api/v1/cnames/{alias}", method="DELETE"
+    ).respond_with_data(status=204)
+
+    # Run the command and verify
+    args = Namespace(name=name, alias=alias)
+    ctx = nullcontext()
+    msg = ""
+
+    if not host_has_cname:
+        msg = "any cname records"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.cname_remove(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("cname", ["bar.example.com"])
+@pytest.mark.parametrize("hostname", ["foo.example.com"])
+@pytest.mark.parametrize("host_has_cname", [True, False])
+def test_cname_replace(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    cname: str,
+    hostname: str,
+    host_has_cname: bool,
+) -> None:
+    other_host = sample_host.copy()
+    other_host["name"] = cname
+
+    if not host_has_cname:
+        other_host["id"] = sample_host["id"] + 1  # make sure ID is different
+
+    _host_info_by_name_handler(httpserver, other_host)
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    # Delete CNAME handler
+    httpserver.expect_oneshot_request(
+        f"/api/v1/cnames/{cname}", method="PATCH"
+    ).respond_with_data(status=204)
+
+    # Run the command and verify
+    args = Namespace(cname=cname, host=hostname)
+    ctx = nullcontext()
+    msg = ""
+
+    if host_has_cname:
+        msg = "already points to"
+        ctx = pytest.raises(CliError)
+
+    with ctx as exc_info:
+        host.cname_replace(args)
+
+    if exc_info:
+        assert msg in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("cpu", ["x86"])
+@pytest.mark.parametrize("os", ["Win"])
+@pytest.mark.parametrize("has_hinfo", [True, False])
+def test_hinfo_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    cpu: str,
+    os: str,
+    has_hinfo: str,
+) -> None:
+    if not has_hinfo:
+        sample_host["hinfo"] = None
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    expect_data = f"host={sample_host['id']}&cpu={cpu}&os={os}"
+    httpserver.expect_oneshot_request(
+        "/api/v1/hinfos/",
+        method="POST",
+        data=expect_data,
+    ).respond_with_data(status=201)
+
+    args = Namespace(name=name, cpu=cpu, os=os)
+
+    ctx = nullcontext()
+    msg = ""
+
+    if has_hinfo:
+        msg = "already has hinfo"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.hinfo_add(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("has_hinfo", [True, False])
+def test_hinfo_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    has_hinfo: str,
+) -> None:
+    if not has_hinfo:
+        sample_host["hinfo"] = None
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    httpserver.expect_oneshot_request(
+        f"/api/v1/hinfos/{sample_host['id']}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    args = Namespace(name=name)
+
+    ctx = nullcontext()
+    msg = ""
+
+    if not has_hinfo:
+        msg = "already has no hinfo"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.hinfo_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("loc", ["Arctic"])
+@pytest.mark.parametrize("has_loc", [True, False])
+def test_loc_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    loc: str,
+    has_loc: str,
+) -> None:
+    if not has_loc:
+        sample_host["loc"] = None
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    expect_data = f"host={sample_host['id']}&loc={loc}"
+    httpserver.expect_oneshot_request(
+        "/api/v1/locs/",
+        method="POST",
+        data=expect_data,
+    ).respond_with_data(status=201)
+
+    args = Namespace(name=name, loc=loc)
+
+    ctx = nullcontext()
+    msg = ""
+
+    if has_loc:
+        msg = "already has loc"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.loc_add(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("has_loc", [True, False])
+def test_loc_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    has_loc: bool,
+) -> None:
+    if not has_loc:
+        sample_host["loc"] = None
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    httpserver.expect_oneshot_request(
+        f"/api/v1/locs/{sample_host['id']}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    args = Namespace(name=name)
+
+    ctx = nullcontext()
+    msg = ""
+
+    if not has_loc:
+        msg = "already has no loc"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.loc_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("priority", [10])
+@pytest.mark.parametrize("mx", ["mx.example.com"])
+@pytest.mark.parametrize("has_mx", [True, False])
+def test_mx_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_mx: Dict[str, Any],
+    name: str,
+    priority: int,
+    mx: str,
+    has_mx: bool,
+) -> None:
+    if not has_mx:
+        sample_host["mx"] = None
+    else:
+        sample_mx.update({"priority": priority, "mx": mx})
+        sample_host["mx"] = [sample_mx]
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    expect_data = f"host={sample_host['id']}&priority={priority}&mx={mx}"
+    httpserver.expect_oneshot_request(
+        "/api/v1/mxs/",
+        method="POST",
+        data=expect_data,
+    ).respond_with_data(status=201)
+
+    args = Namespace(name=name, priority=priority, mx=mx)
+
+    ctx = nullcontext()
+    msg = ""
+
+    if has_mx:
+        msg = "already has that mx"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.mx_add(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("priority", [10])
+@pytest.mark.parametrize("mx", ["mx.example.com"])
+@pytest.mark.parametrize("has_mx", [True, False])
+def test_mx_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_mx: Dict[str, Any],
+    name: str,
+    priority: int,
+    mx: str,
+    has_mx: bool,
+) -> None:
+    if not has_mx:
+        sample_host["mx"] = None
+    else:
+        sample_mx.update({"priority": priority, "mx": mx})
+        sample_host["mx"] = [sample_mx]
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    httpserver.expect_oneshot_request(
+        f"/api/v1/mxs/{sample_mx['id']}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    args = Namespace(name=name, priority=priority, mx=mx)
+
+    ctx = nullcontext()
+    msg = ""
+
+    if not has_mx:
+        msg = "no MX"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.mx_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
