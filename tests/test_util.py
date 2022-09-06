@@ -11,7 +11,13 @@ from mreg_cli import util
 from mreg_cli.exceptions import CliError, CliWarning, HostNotFoundWarning
 from pytest_httpserver import HTTPServer
 
-from .handlers import cname_exists_handler, _host_info_by_name_handler
+from .handlers import (
+    _cname_info_by_name_handler,
+    cname_exists_handler,
+    _host_info_by_name_handler,
+    ip_in_mreg_net_handler,
+    _srv_info_by_name_handler,
+)
 
 
 def test_set_config() -> None:
@@ -144,44 +150,26 @@ def test__host_info_by_name(
     assert util._host_info_by_name(sample_host["name"], follow_cname=False) is None
 
 
-def test__cname_info_by_name(httpserver: HTTPServer) -> None:
-    name = "foo"
-    httpserver.expect_oneshot_request(
-        f"/api/v1/cnames/", method="GET", query_string={"name": name}
-    ).respond_with_json(
-        {
-            "results": [{"name": "foo"}],
-            "next": None,
-        }
-    )
-    assert util._cname_info_by_name(name) == {"name": "foo"}
+def test__cname_info_by_name(
+    httpserver: HTTPServer, sample_host: Dict[str, Any]
+) -> None:
+    _cname_info_by_name_handler(httpserver, sample_host)
+    assert util._cname_info_by_name(sample_host["name"]) == sample_host
 
     # Multiple and no match yields None
-    for res in [[{"name": "foo"}, {"name": "bar"}], []]:
-        httpserver.expect_oneshot_request(
-            f"/api/v1/cnames/", method="GET", query_string={"name": name}
-        ).respond_with_json({"results": res, "next": None})
-        assert util._cname_info_by_name(name) is None
+    for res in [[sample_host, sample_host], []]:
+        _cname_info_by_name_handler(httpserver, sample_host, response=res)
+        assert util._cname_info_by_name(sample_host["name"]) is None
 
 
-def test__srv_info_by_name(httpserver: HTTPServer) -> None:
-    name = "foo"
-    httpserver.expect_oneshot_request(
-        f"/api/v1/srvs/", method="GET", query_string={"name": name}
-    ).respond_with_json(
-        {
-            "results": [{"name": "foo"}],
-            "next": None,
-        }
-    )
-    assert util._srv_info_by_name(name) == {"name": "foo"}
+def test__srv_info_by_name(httpserver: HTTPServer, sample_srv: Dict[str, Any]) -> None:
+    _srv_info_by_name_handler(httpserver, sample_srv)
+    assert util._srv_info_by_name(sample_srv["name"]) == sample_srv
 
     # Multiple and no match yields None
-    for res in [[{"name": "foo"}, {"name": "bar"}], []]:
-        httpserver.expect_oneshot_request(
-            f"/api/v1/srvs/", method="GET", query_string={"name": name}
-        ).respond_with_json({"results": res, "next": None})
-        assert util._srv_info_by_name(name) is None
+    for res in [[sample_srv, sample_srv], []]:
+        _srv_info_by_name_handler(httpserver, sample_srv, response=res)
+        assert util._srv_info_by_name(sample_srv["name"]) is None
 
 
 @pytest.mark.parametrize(
@@ -271,10 +259,7 @@ def test_get_network_by_ip(
 def test_ip_in_mreg_net(httpserver: HTTPServer, sample_network: Dict[str, Any]) -> None:
     # Match with valid IP
     IP = "10.0.1.20"
-    httpserver.expect_oneshot_request(
-        f"/api/v1/networks/ip/{urllib.parse.quote(IP)}", method="GET"
-    ).respond_with_json(sample_network)
-
+    ip_in_mreg_net_handler(httpserver, sample_network, IP)
     assert util.ip_in_mreg_net(IP) == True  # explicit comparison
 
 
