@@ -9,14 +9,13 @@ See: conftest.py:httpserver fixture.
 """
 
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pytest
-from mreg_cli import util
 from mreg_cli.util import clean_hostname, format_mac
 from pytest_httpserver import HTTPServer
 
-from .utils import patch__get_ip_from_args
+from .utils import get_list_response, patch__get_ip_from_args
 
 ###############
 # Module: util
@@ -64,6 +63,19 @@ def get_network_by_ip_handler(
     ).respond_with_json(sample_network, status=status)
 
 
+def ip_in_mreg_net_handler(
+    httpserver: HTTPServer,
+    sample_network: Dict[str, Any],
+    ip: str,
+    status: int = 200,
+) -> None:
+    """Handler for util.ip_in_mreg_net().
+
+    Currently just wraps get_network_by_ip_handler().
+    """
+    get_network_by_ip_handler(httpserver, ip, sample_network, status=status)
+
+
 ###############
 # Module: host
 ###############
@@ -88,11 +100,18 @@ def _host_info_by_name_handler(
     cname: bool = False,
     is404: bool = False,
     hostname: Optional[str] = None,  # override hostname in sample_host
+    response: Optional[Dict[str, Any]] = None,
+    empty: bool = False,
 ) -> None:
     if hostname is None:
         pname = urllib.parse.quote(sample_host["name"])
     else:
         pname = urllib.parse.quote(hostname)
+
+    if response is not None or empty:
+        resp = response
+    else:
+        resp = sample_host
 
     # No match (404)
     if is404:
@@ -105,7 +124,7 @@ def _host_info_by_name_handler(
         httpserver.expect_oneshot_request(
             f"/api/v1/hosts/{pname}", method="GET"
         ).respond_with_json(
-            sample_host,
+            resp,
         )
 
     # Match via CNAME lookup
@@ -120,12 +139,69 @@ def _host_info_by_name_handler(
         httpserver.expect_oneshot_request(
             f"/api/v1/hosts/", method="GET", query_string=f"cnames__name={pname}"
         ).respond_with_json(
-            {
-                "results": [sample_host],
-                "next": None,
-            },
+            get_list_response(resp),
         )
 
+
+def _cname_info_by_name_handler(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    hostname: Optional[str] = None,
+    response: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+    empty: bool = False,
+) -> None:
+    hostname = hostname or sample_host["name"]
+    if response is not None or empty:
+        resp = response
+    else:
+        resp = sample_host
+
+    httpserver.expect_oneshot_request(
+        "/api/v1/cnames/",
+        method="GET",
+        query_string=urllib.parse.urlencode({"name": hostname}),
+    ).respond_with_json(
+        get_list_response(resp),
+    )
+
+
+def _srv_info_by_name_handler(
+    httpserver: HTTPServer,
+    sample_srv: Dict[str, Any],
+    hostname: Optional[str] = None,
+    response: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+    empty: bool = False,
+) -> None:
+    hostname = hostname or sample_srv["name"]
+    if response is not None or empty:
+        resp = response
+    else:
+        resp = sample_srv
+
+    httpserver.expect_oneshot_request(
+        "/api/v1/srvs/",
+        method="GET",
+        query_string=urllib.parse.urlencode({"name": hostname}),
+    ).respond_with_json(
+        get_list_response(resp),
+    )
+
+
+def get_info_by_name_handler(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_srv: Dict[str, Any],
+    hostname: Optional[str] = None,
+    host_empty: bool = False,
+    cname_empty: bool = False,
+    srv_empty: bool = False,
+) -> None:
+    if hostname is not None:
+        sample_host["name"] = hostname
+        sample_srv["name"] = hostname
+    _host_info_by_name_handler(httpserver, sample_host, empty=host_empty)
+    _cname_info_by_name_handler(httpserver, sample_host, empty=cname_empty)
+    _srv_info_by_name_handler(httpserver, sample_srv, empty=srv_empty)
 
 def resolve_input_name_handler(
     httpserver: HTTPServer,
@@ -201,12 +277,9 @@ def _get_ip_from_args_handler(
     # Init handler for util.get_network() calls
     get_network_handler(httpserver, sample_network, ip=ip, is_network=is_network)
 
-    # TODO: use get_network_reserved_ips handler here instead
-    reserved_ips = [ip] if ip_reserved else []
-    n = sample_network["network"]  # not quite right for IPv6
-    httpserver.expect_oneshot_request(
-        f"/api/v1/networks/{n}/reserved_list", method="GET"
-    ).respond_with_json({"results": reserved_ips, "next": None})
+    get_network_reserved_ips_handler(
+        httpserver, sample_network, ip, reserved=ip_reserved
+    )
 
 
 def _ip_add_handler(
@@ -268,6 +341,18 @@ def _ip_add_handler(
         "/api/v1/ipaddresses/", method="POST"
     ).respond_with_data(status=201)
 
+
+def get_network_reserved_ips_handler(
+    httpserver: HTTPServer,
+    sample_network: Dict[str, Any],
+    ip: str,
+    reserved: bool,
+) -> None:
+    """Handler for util.get_network_reserved_ips()."""
+    reserved_ips = [ip] if reserved else []
+    httpserver.expect_oneshot_request(
+        f"/api/v1/networks/{sample_network['network']}/reserved_list", method="GET"
+    ).respond_with_json(reserved_ips)
 
 def _ip_change_handler(
     httpserver: HTTPServer,
