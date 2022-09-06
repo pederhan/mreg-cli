@@ -146,6 +146,8 @@ def test__get_ip_from_args(
         ctx = pytest.raises(CliWarning)
     elif (ip_in_use and not force) and not is_network:
         ctx = pytest.raises(CliWarning)
+    elif ip_reserved and not force and not is_network:
+        ctx = pytest.raises(CliWarning)
     with ctx:
         res = host._get_ip_from_args(ip, force, ipversion)
 
