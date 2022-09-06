@@ -721,6 +721,11 @@ def search(args: Namespace):
 
     for network in networks:
         print_network_info(network_info=network)
+        print()  # Blank line between networks
+
+    n_networks = len(networks)
+    s = "s" if n_networks > 1 else ""
+    print(f"Found {n_networks} network{s} matching the search criteria.")
 
 
 network.add_command(
