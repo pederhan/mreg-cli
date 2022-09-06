@@ -1,4 +1,6 @@
+from argparse import Namespace
 import ipaddress
+from typing import Any, Dict, Optional
 import urllib.parse
 
 from .cli import Flag, cli
@@ -22,6 +24,7 @@ from .util import (
     patch,
     post,
     string_to_int,
+    convert_wildcard_to_regex,
 )
 
 ###################################
@@ -164,29 +167,46 @@ def info(args):
     """Display network info
     """
     for net in args.networks:
-        # Get network info or raise exception
-        ip_range = get_network_range_from_input(net)
-        network_info = get_network(ip_range)
-        used = get_network_used_count(ip_range)
-        unused = get_network_unused_count(ip_range)
-        network = ipaddress.ip_network(ip_range)
+        print_network_info(network=net)
 
-        # Pretty print all network info
-        print_network(network_info['network'], "Network:")
-        print_network(network.netmask.exploded, "Netmask:")
-        print_network(network_info['description'], "Description:")
-        print_network(network_info['category'], "Category:")
-        print_network(network_info['location'], "Location:")
-        print_network(network_info['vlan'], "VLAN")
-        print_network(network_info['dns_delegated'] if
-                      network_info['dns_delegated'] else False, "DNS delegated:")
-        print_network(network_info['frozen'] if network_info['frozen'] else False,
-                      "Frozen")
-        print_network_reserved(network_info['network'], network_info['reserved'])
-        print_network_excluded_ranges(network_info['excluded_ranges'])
-        print_network(used, "Used addresses:")
-        print_network_unused(unused)
-        cli_info(f"printed network info for {ip_range}")
+
+# TODO: add overload
+def print_network_info(
+    *, network: Optional[str] = None, network_info: Optional[Dict[str, Any]] = None
+) -> None:
+
+    if network:
+        ip_range = ip_range = get_network_range_from_input(network)
+        network_info = get_network(ip_range)
+    elif network_info:
+        ip_range = network_info["network"]
+    else:
+        # FIXME:improve error
+        cli_warning(
+            "A network in the CIDR notation or a network info dict is required."
+        )
+
+    used = get_network_used_count(ip_range)
+    unused = get_network_unused_count(ip_range)
+    ip_network = ipaddress.ip_network(ip_range)
+
+    # Pretty print all network info
+    print_network(network_info["network"], "Network:")
+    print_network(ip_network.netmask.exploded, "Netmask:")
+    print_network(network_info["description"], "Description:")
+    print_network(network_info["category"], "Category:")
+    print_network(network_info["location"], "Location:")
+    print_network(network_info["vlan"], "VLAN")
+    print_network(
+        network_info["dns_delegated"] if network_info["dns_delegated"] else False,
+        "DNS delegated:",
+    )
+    print_network(network_info["frozen"] if network_info["frozen"] else False, "Frozen")
+    print_network_reserved(network_info["network"], network_info["reserved"])
+    print_network_excluded_ranges(network_info["excluded_ranges"])
+    print_network(used, "Used addresses:")
+    print_network_unused(unused)
+    cli_info(f"printed network info for {ip_range}")
 
 
 network.add_command(
@@ -675,4 +695,83 @@ network.add_command(
              description='Network.',
              metavar='NETWORK'),
     ]
+)
+
+
+def search(args: Namespace):
+    """Search for networks."""
+    args_dict = vars(args)
+    # The callback function is passed to args for some reason
+    args_dict.pop("func")
+
+    params = {}
+    for arg, value in args_dict.items():
+        if value is None:
+            continue
+        param, val = convert_wildcard_to_regex(arg, value)
+        params[param] = val
+
+    if not params:
+        cli_warning("Need at least one search criteria")
+
+    path = f"/api/v1/networks/"
+    networks = get_list(path, params)
+    if not networks:
+        cli_warning("No networks matching the query were found.")
+
+    for network in networks:
+        print_network_info(network_info=network)
+
+
+network.add_command(
+    prog="find",
+    description="Search for networks based on a range of search parameters.",
+    short_desc="Search for networks.",
+    callback=search,
+    flags=[
+        Flag(
+            "-network",
+            description="Network.",
+            metavar="NETWORK",
+        ),
+        Flag(
+            "-description",
+            description="Description.",
+            metavar="DESCRIPTION",
+        ),
+        Flag(
+            "-vlan",
+            description="VLAN.",
+            type=int,
+            metavar="VLAN",
+        ),
+        Flag(
+            "-dns_delegated",
+            description="DNS-administration is not being handled elsewhere.",
+            type=bool,
+            metavar="DNS-DELEGATED",
+        ),
+        Flag(
+            "-category",
+            description="Category.",
+            metavar="CATEGORY",
+        ),
+        Flag(
+            "-location",
+            description="Location.",
+            metavar="LOCATION",
+        ),
+        Flag(
+            "-frozen",
+            description="Frozen.",
+            type=bool,
+            metavar="FROZEN",
+        ),
+        Flag(
+            "-reserved",
+            description="Reserved.",
+            type=int,
+            metavar="RESERVED",
+        ),
+    ],
 )
