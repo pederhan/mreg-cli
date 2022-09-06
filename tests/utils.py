@@ -1,10 +1,21 @@
 import sys
-from typing import Any, Dict, Iterable, Optional, overload
+from typing import (
+    Any,
+    Dict,
+    List,
+    Sequence,
+    Iterable,
+    Optional,
+    TypeVar,
+    Union,
+    overload,
+)
 from typing_extensions import Literal
 from mreg_cli import host
 
 import pytest
 
+T = TypeVar("T", Dict[str, Any], None)
 
 @overload
 def macaddresses(
@@ -66,3 +77,17 @@ def mock__get_ip_from_args(
         return sample_ipaddress["ipaddress"]
 
     return func
+
+
+def get_list_response(results: Union[T, List[T], None]) -> Dict[str, Any]:
+    """Creates the response body expected for a `util.get_list()` call"""
+    if results and not isinstance(results, list):
+        results = [results]
+    else:
+        results = []
+    return {
+        "results": results,
+        "count": len(results),
+        "next": None,
+        "previous": None,
+    }
