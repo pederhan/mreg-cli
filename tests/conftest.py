@@ -255,3 +255,17 @@ def sample_srv() -> Dict[str, Any]:
         "zone": 10,
         "host": 172,
     }
+
+
+@pytest.fixture
+def sample_sshfp() -> Dict[str, Any]:
+    return {
+        "id": 11,
+        "created_at": "2020-12-03T17:04:59.086951+01:00",
+        "updated_at": "2020-12-03T17:04:59.086983+01:00",
+        "ttl": None,
+        "algorithm": 1,
+        "hash_type": 1,
+        "fingerprint": "12345678abcde",
+        "host": 173,
+    }

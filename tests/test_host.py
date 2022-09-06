@@ -1,33 +1,30 @@
-from argparse import Namespace
-from site import venv
-import sys
+from enum import Enum, auto
+from random import sample
 import urllib.parse
-
-from typing import Any, Callable, ContextManager, Dict, List, Optional, Type
+from argparse import Namespace
+from typing import Any, ContextManager, Dict, List, Optional, Type, Union
 
 import pytest
-from mreg_cli import host, util
+from mreg_cli import host
 from mreg_cli.exceptions import CliError, CliWarning, HostNotFoundWarning
 from pytest_httpserver import HTTPServer
+
+from .compat import nullcontext
 from .handlers import (
+    _get_ip_from_args_handler,
+    _host_info_by_name_handler,
+    _ip_add_handler,
     _ip_change_handler,
     _ip_move_handler,
     assoc_mac_to_ip_handler,
     cname_exists_handler,
-    _get_ip_from_args_handler,
+    get_info_by_name_handler,
+    get_network_by_ip_handler,
+    get_network_reserved_ips_handler,
+    ip_in_mreg_net_handler,
     zoneinfo_for_hostname_handler,
-    _host_info_by_name_handler,
-    _ip_add_handler,
 )
-from .utils import (
-    patch__get_ip_from_args,
-    requires_nullcontext,
-    macaddresses,
-)
-from .compat import nullcontext
-
-
-
+from .utils import get_list_response, macaddresses, patch__get_ip_from_args
 
 
 @pytest.mark.parametrize(
@@ -1134,7 +1131,7 @@ def test_mx_add(
 @pytest.mark.parametrize("name", ["foo.example.com"])
 @pytest.mark.parametrize("priority", [10])
 @pytest.mark.parametrize("mx", ["mx.example.com"])
-@pytest.mark.parametrize("has_mx", [True, False])
+@pytest.mark.parametrize("has_mx", [True, False])  # Not a CLI arg
 def test_mx_remove(
     httpserver: HTTPServer,
     sample_host: Dict[str, Any],
@@ -1167,6 +1164,762 @@ def test_mx_remove(
 
     with ctx as exc_info:
         host.mx_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+# TODO: parametrize with different flags, services, orders, etc.
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("preference", [16384])
+@pytest.mark.parametrize("order", [3])
+@pytest.mark.parametrize("flag", ["u"])
+@pytest.mark.parametrize("service", ["SIP"])
+@pytest.mark.parametrize("regex", ["[abc]+"])
+@pytest.mark.parametrize("replacement", ["wonk"])
+def test_naptr_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    capsys: pytest.CaptureFixture[str],
+    name: str,
+    preference: int,
+    order: int,
+    flag: str,
+    service: str,
+    regex: str,
+    replacement: str,
+) -> None:
+    _host_info_by_name_handler(httpserver, sample_host, hostname=name)
+
+    expect_data_dict = {
+        "preference": preference,
+        "order": order,
+        "flag": flag,
+        "service": service,
+        "regex": regex,
+        "replacement": replacement,
+        "host": sample_host["id"],
+    }
+
+    # Set up handler for POST request
+    expect_data = urllib.parse.urlencode(expect_data_dict)
+    httpserver.expect_oneshot_request(
+        "/api/v1/naptrs/",
+        method="POST",
+        data=expect_data,
+    ).respond_with_data(status=201)
+
+    args = Namespace(
+        name=name,
+        preference=preference,
+        order=order,
+        flag=flag,
+        service=service,
+        regex=regex,
+        replacement=replacement,
+    )
+    host.naptr_add(args)
+
+    out, err = capsys.readouterr()
+    assert "created NAPTR".lower() in out.lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("preference", [16384])
+@pytest.mark.parametrize("order", [3])
+@pytest.mark.parametrize("flag", ["u"])
+@pytest.mark.parametrize("service", ["SIP"])
+@pytest.mark.parametrize("regex", ["[abc]+"])
+@pytest.mark.parametrize("replacement", ["wonk"])
+@pytest.mark.parametrize("naptr_exists", [True, False])
+def test_naptr_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    preference: int,
+    order: int,
+    flag: str,
+    service: str,
+    regex: str,
+    replacement: str,
+    naptr_exists: bool,
+) -> None:
+    _host_info_by_name_handler(httpserver, sample_host, hostname=name)
+
+    response_naptr = {
+        "preference": preference,
+        "order": order,
+        "flag": flag,
+        "service": service,
+        "regex": regex,
+        "replacement": replacement,
+    }
+    naptr_id = 123
+    if not naptr_exists:
+        response_naptr["preference"] += 1  # will not match
+    else:
+        response_naptr["id"] = naptr_id  # set ID used for deletion endpoint
+
+    # Handler for GET request
+    httpserver.expect_oneshot_request(
+        "/api/v1/naptrs/", method="GET"
+    ).respond_with_json({"results": [response_naptr], "count": 1, "next": None})
+
+    # Handler for DELETE request
+    httpserver.expect_oneshot_request(
+        f"/api/v1/naptrs/{naptr_id}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    # Call function with args and check output
+    args = Namespace(
+        name=name,
+        preference=preference,
+        order=order,
+        flag=flag,
+        service=service,
+        regex=regex,
+        replacement=replacement,
+    )
+    ctx = nullcontext()
+    msg = ""
+    if not naptr_exists:
+        msg = "any matching NAPTR"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.naptr_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("ip", ["10.0.0.5", "7593:4588:f58f:f153:dead:beef:1234:1234"])
+@pytest.mark.parametrize("old", ["foo.example.com"])
+@pytest.mark.parametrize("new", ["bar.example.com"])
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("old_has_ptr", [True, False])
+@pytest.mark.parametrize("new_has_ptr", [True, False])
+@pytest.mark.parametrize("ip_matches_arg", [True, False])
+def test_ptr_change(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    ip: int,
+    old: int,
+    new: str,
+    force: bool,
+    old_has_ptr: bool,
+    new_has_ptr: bool,
+    ip_matches_arg: bool,  # old host has IP matching argument
+) -> None:
+    old_host = sample_host.copy()
+    new_host = sample_host.copy()
+
+    old_host["name"] = old
+    new_host["name"] = new
+
+    if old_has_ptr:
+        if ip_matches_arg:
+            old_host["ptr_overrides"][0]["ipaddress"] = ip
+        else:
+            # NOTE: since we don't know what IP the fixture provides,
+            # we run an assert statement to make sure the IP doesn't match
+            # This let's us debug this test easier in case the fixture changes
+            # and these IPs match
+            old_host["ptr_overrides"][0][
+                "ipaddress"
+            ] = "9.9.9.9"  # invalid (not matching)
+            assert ip != old_host["ptr_overrides"][0]["ipaddress"]
+    else:
+        old_host["ptr_overrides"] = []
+
+    if not new_has_ptr:
+        new_host["ptr_overrides"] = []
+
+    _host_info_by_name_handler(httpserver, old_host)
+    _host_info_by_name_handler(httpserver, new_host)
+
+    # Handler for GET request
+    if old_has_ptr:
+        ptr_id = old_host["ptr_overrides"][0]["id"]
+    else:
+        ptr_id = 0  # dummy value, never used
+
+    httpserver.expect_oneshot_request(
+        f"/api/v1/ptroverrides/{ptr_id}", method="PATCH"
+    ).respond_with_data(status=200)
+
+    # Call function with args and check output
+    args = Namespace(
+        ip=ip,
+        old=old,
+        new=new,
+        force=force,
+    )
+
+    # NOTE: could maybe refactor this bit to avoid code duplication
+    # This "idiom" is repeated in several places in this file
+    ctx = nullcontext()
+    msg = ""
+    if new_has_ptr:
+        msg = "already"
+        ctx = pytest.raises(CliWarning)
+    elif not old_has_ptr:
+        msg = "no PTR record"
+        ctx = pytest.raises(CliWarning)
+    elif not ip_matches_arg:
+        msg = "match"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.ptr_change(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+class PTRState(Enum):
+    MATCH = 1
+    NO_MATCH = 2
+    NO_PTR = 3
+
+
+@pytest.mark.parametrize("ip", ["10.0.0.5", "7593:4588:f58f:f153:dead:beef:1234:1234"])
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize(
+    "ptr_state", [PTRState.MATCH, PTRState.NO_MATCH, PTRState.NO_PTR]
+)
+def test_ptr_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    ip: str,
+    name: str,
+    ptr_state: PTRState,
+) -> None:
+    # We test 3 states:
+    #   1. host has PTR record with correct IP (MATCH)
+    #   2. host has PTR record with incorrect IP (NO_MATCH)
+    #   3. host has no PTR record (NO_PTR)
+    if ptr_state != PTRState.NO_PTR:
+        if ptr_state == PTRState.MATCH:
+            ptr_ip = ip
+        else:  # assume NO_MATCH
+            ptr_ip = "9.9.9.9"
+            # Assert the chosen IP address doesn't match the one in the fixture
+            assert ptr_ip != sample_host["ptr_overrides"][0]["ipaddress"]
+        sample_host["ptr_overrides"][0]["ipaddress"] = ptr_ip
+
+        ptr_id = sample_host["ptr_overrides"][0]["id"]
+        httpserver.expect_oneshot_request(
+            f"/api/v1/ptroverrides/{ptr_id}", method="DELETE"
+        ).respond_with_data(status=204)
+
+    else:
+        sample_host["ptr_overrides"] = []
+
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    # Call function with args and check output
+    args = Namespace(
+        ip=ip,
+        name=name,
+    )
+
+    ctx = nullcontext()
+    msg = ""
+    if ptr_state in [PTRState.NO_MATCH, PTRState.NO_PTR]:
+        msg = "no PTR record"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.ptr_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+class PTRStatus(Enum):
+    OK = auto()
+    IP_IN_NON_MREG = auto()
+    PTR_IN_NON_MREG = auto()
+    IP_RESERVED = auto()
+    PTR_EXISTS = auto()
+
+
+@pytest.mark.parametrize("ip", ["10.0.0.5", "7593:4588:f58f:f153:dead:beef:1234:1234"])
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("ptr_status", list(PTRStatus))
+def test_ptr_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_network: Dict[str, Any],
+    sample_ptr_override: Dict[str, Any],
+    ip: str,
+    name: str,
+    force: bool,
+    ptr_status: PTRStatus,
+) -> None:
+    # Handler for IP in MREG check
+    if ptr_status == PTRStatus.IP_IN_NON_MREG:
+        mreg_status = 404
+    else:
+        mreg_status = 200
+    ip_in_mreg_net_handler(httpserver, sample_network, ip, status=mreg_status)
+
+    # Handler for host info (with or without zone)
+    if ptr_status == PTRStatus.PTR_IN_NON_MREG:
+        sample_host["zone"] = None
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    # Handlers for retrieving network info
+    get_network_by_ip_handler(httpserver, ip, sample_network)
+    is_reserved = ptr_status == PTRStatus.IP_RESERVED
+    get_network_reserved_ips_handler(
+        httpserver, sample_network, ip, reserved=is_reserved
+    )
+
+    # Handler for PTR record listing
+    if ptr_status == PTRStatus.PTR_EXISTS:
+        ptr = sample_ptr_override
+    else:
+        ptr = None
+    httpserver.expect_oneshot_request(
+        "/api/v1/ptroverrides/",
+        method="GET",
+        # query_string=urllib.parse.urlencode({"ipaddress": ip}),
+    ).respond_with_json(get_list_response(ptr))
+
+    # Handler for PTR record creation
+    httpserver.expect_oneshot_request(
+        "/api/v1/ptroverrides/",
+        method="POST",
+        # data=urllib.parse.urlencode({"host": sample_host["id"], "ipaddress": ip}),
+    ).respond_with_data(status=201)
+
+    # Call function with args and check output
+    args = Namespace(
+        ip=ip,
+        name=name,
+        force=force,
+    )
+
+    ctx = nullcontext()
+    msg = ""
+    if ptr_status == PTRStatus.IP_IN_NON_MREG:
+        msg = "network controlled by MREG"
+        ctx = pytest.raises(CliWarning)
+    elif ptr_status == PTRStatus.PTR_EXISTS:
+        msg = "already exist"
+        ctx = pytest.raises(CliWarning)
+    elif ptr_status == PTRStatus.PTR_IN_NON_MREG and not force:
+        msg = "zone controlled by MREG"
+        ctx = pytest.raises(CliWarning)
+    elif ptr_status == PTRStatus.IP_RESERVED and not force:
+        msg = "reserved"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.ptr_add(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["srv.foo.example.com"])
+@pytest.mark.parametrize("priority", [1])
+@pytest.mark.parametrize("weight", [1])
+@pytest.mark.parametrize("port", [1])
+@pytest.mark.parametrize("hostname", ["foo.example.com"])
+@pytest.mark.parametrize("ttl", [1])
+@pytest.mark.parametrize("force", [True, False])
+def test_srv_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_zone: Dict[str, Any],
+    name: str,
+    priority: int,
+    weight: int,
+    port: int,
+    hostname: str,
+    ttl: int,
+    force: bool,
+) -> None:
+    # Handler for server info
+    sample_zone["name"] = name
+    zoneinfo_for_hostname_handler(httpserver, name, sample_zone)
+
+    # Handlers for retrieving host info
+    sample_host["name"] = hostname
+    zoneinfo_for_hostname_handler(httpserver, hostname, sample_zone)
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    data = {
+        "name": name,
+        "priority": priority,
+        "weight": weight,
+        "port": port,
+        "host": sample_host["id"],
+        "ttl": ttl,
+    }
+
+    # Handler for creating SRV record
+    httpserver.expect_oneshot_request(
+        "/api/v1/srvs/",
+        method="POST",
+        data=urllib.parse.urlencode(data),
+    ).respond_with_data(status=201)
+
+    args = Namespace(
+        name=name,
+        priority=priority,
+        weight=weight,
+        port=port,
+        host=hostname,
+        ttl=ttl,
+        force=force,
+    )
+
+    host.srv_add(args)
+
+
+@pytest.mark.parametrize("name", ["srv.foo.example.com"])
+@pytest.mark.parametrize("priority", [1])
+@pytest.mark.parametrize("weight", [1])
+@pytest.mark.parametrize("port", [1])
+@pytest.mark.parametrize("hostname", ["foo.example.com"])
+@pytest.mark.parametrize("srv_exists", [True, False])
+def test_srv_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_zone: Dict[str, Any],
+    sample_srv: Dict[str, Any],
+    name: str,
+    priority: int,
+    weight: int,
+    port: int,
+    hostname: str,
+    srv_exists: bool,
+) -> None:
+    # Handler for server info
+    sample_host["name"] = hostname
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    if srv_exists:
+        srv_resp = sample_srv
+        sample_srv["name"] = name
+    else:
+        srv_resp = None
+
+    # Handler for fetching SRV records
+    httpserver.expect_oneshot_request(
+        "/api/v1/srvs/",
+        method="GET",
+        query_string=urllib.parse.urlencode({"name": name, "host": sample_host["id"]}),
+    ).respond_with_json(get_list_response(srv_resp))
+
+    # Handler for creating SRV record
+    httpserver.expect_oneshot_request(
+        f"/api/v1/srvs/{sample_srv['id']}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    # If we expect to find the SRV, we pass the fixture values
+    if srv_exists:
+        args = Namespace(
+            name=sample_srv["name"],
+            priority=sample_srv["priority"],
+            weight=sample_srv["weight"],
+            port=sample_srv["port"],
+            host=hostname,
+        )
+    # Otherwise we pass the pytest parameters
+    else:
+        args = Namespace(
+            name=name,
+            priority=priority,
+            weight=weight,
+            port=port,
+            host=hostname,
+        )
+
+    ctx = nullcontext()
+    msg = ""
+
+    if not srv_exists:
+        msg = "no service named"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.srv_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("algorithm", ["1"])
+@pytest.mark.parametrize("hash_type", ["1"])
+@pytest.mark.parametrize("fingerprint", ["12345678abcde"])
+def test_sshfp_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    name: str,
+    algorithm: str,
+    hash_type: str,
+    fingerprint: str,
+) -> None:
+    sample_host["name"] = name
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    data = {
+        "algorithm": algorithm,
+        "hash_type": hash_type,
+        "fingerprint": fingerprint,
+        "host": sample_host["id"],
+    }
+
+    # Handler for creating SRV record
+    httpserver.expect_oneshot_request(
+        "/api/v1/sshfps/",
+        method="POST",
+        data=urllib.parse.urlencode(data),
+    ).respond_with_data(status=201)
+
+    args = Namespace(
+        name=name,
+        algorithm=algorithm,
+        hash_type=hash_type,
+        fingerprint=fingerprint,
+    )
+
+    host.sshfp_add(args)
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("fingerprint", ["12345678abcde", None])
+@pytest.mark.parametrize("sshfp_exists", [True, False])
+def test_sshfp_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_sshfp: Dict[str, Any],
+    name: str,
+    fingerprint: Optional[str],
+    sshfp_exists: bool,
+) -> None:
+    sample_host["name"] = name
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    data = {
+        "host": sample_host["id"],
+    }
+
+    # Handler for fetching SRV records
+    sshfp_record = sample_sshfp if sshfp_exists else None
+    httpserver.expect_oneshot_request(
+        "/api/v1/sshfps/",
+        method="GET",
+        query_string=urllib.parse.urlencode(data),
+    ).respond_with_json(get_list_response(sshfp_record))
+
+    # Handler for fetching SRV records
+    httpserver.expect_oneshot_request(
+        f"/api/v1/sshfps/{sample_sshfp['id']}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    args = Namespace(
+        name=name,
+        fingerprint=fingerprint,
+    )
+
+    ctx = nullcontext()
+    msg = ""
+
+    if not sshfp_exists:
+        msg = "no SSHFP records"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.sshfp_remove(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("record_type", ["host", "cname", "srv"])  # host == A
+def test_ttl_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_srv: Dict[str, Any],
+    name: str,
+    record_type: str,
+) -> None:
+    host_empty = record_type != "host"
+    cname_empty = record_type != "cname"
+    srv_empty = record_type != "srv"
+
+    get_info_by_name_handler(
+        httpserver,
+        sample_host,
+        sample_srv,
+        hostname=name,
+        host_empty=host_empty,
+        cname_empty=cname_empty,
+        srv_empty=srv_empty,
+    )
+
+    if record_type == "srv":
+        resp = sample_srv
+    else:
+        resp = sample_host
+
+    # Handler for creating SRV record
+    httpserver.expect_oneshot_request(
+        f"/api/v1/{record_type}s/{resp['name']}",
+        method="PATCH",
+        data=urllib.parse.urlencode({"ttl": ""}),
+    ).respond_with_data(status=200)
+
+    args = Namespace(
+        name=name,
+    )
+    host.ttl_remove(args)
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("record_type", ["host", "cname", "srv"])  # host == A
+@pytest.mark.parametrize("ttl", [68400, "default"])
+def test_ttl_set(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_srv: Dict[str, Any],
+    name: str,
+    record_type: str,
+    ttl: Union[int, str],
+) -> None:
+    host_empty = record_type != "host"
+    cname_empty = record_type != "cname"
+    srv_empty = record_type != "srv"
+
+    get_info_by_name_handler(
+        httpserver,
+        sample_host,
+        sample_srv,
+        hostname=name,
+        host_empty=host_empty,
+        cname_empty=cname_empty,
+        srv_empty=srv_empty,
+    )
+
+    if record_type == "srv":
+        resp = sample_srv
+    else:
+        resp = sample_host
+
+    # Handler for creating SRV record
+    expect_ttl = {"ttl": str(ttl) if ttl != "default" else ""}
+    httpserver.expect_oneshot_request(
+        f"/api/v1/{record_type}s/{resp['name']}",
+        method="PATCH",
+        data=urllib.parse.urlencode(expect_ttl),
+    ).respond_with_data(status=200)
+
+    args = Namespace(
+        name=name,
+        ttl=ttl,
+    )
+    host.ttl_set(args)
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("txt_exists", [True, False])
+def test_txt_add(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_txt: Dict[str, Any],
+    name: str,
+    txt_exists: bool,
+) -> None:
+    if txt_exists:
+        sample_host["txts"] = [sample_txt]
+    else:
+        sample_host["txts"] = []
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    expect_data = {
+        "host": sample_host["id"],
+        "txt": sample_txt["txt"],
+    }
+    httpserver.expect_oneshot_request(
+        f"/api/v1/txts/",
+        method="POST",
+        data=urllib.parse.urlencode(expect_data),
+    ).respond_with_data(status=201)
+
+    args = Namespace(
+        name=name,
+        text=sample_txt["txt"],
+    )
+
+    ctx = nullcontext()
+    msg = ""
+
+    if txt_exists:
+        msg = "already exists"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.txt_add(args)
+
+    if exc_info:
+        assert msg.lower() in exc_info.exconly().lower()
+
+
+@pytest.mark.parametrize("name", ["foo.example.com"])
+@pytest.mark.parametrize("force", [True, False])
+@pytest.mark.parametrize("txt_exists", [True, False])
+def test_txt_remove(
+    httpserver: HTTPServer,
+    sample_host: Dict[str, Any],
+    sample_txt: Dict[str, Any],
+    name: str,
+    force: bool,
+    txt_exists: bool,
+) -> None:
+    if txt_exists:
+        sample_host["txts"] = [sample_txt]
+    else:
+        sample_host["txts"] = []
+    _host_info_by_name_handler(httpserver, sample_host)
+
+    resp = sample_txt if txt_exists else None
+    httpserver.expect_oneshot_request(
+        f"/api/v1/txts/",
+        method="GET",
+    ).respond_with_json(get_list_response(resp))
+
+    httpserver.expect_oneshot_request(
+        f"/api/v1/txts/{sample_txt['id']}",
+        method="DELETE",
+    ).respond_with_data(status=204)
+
+    args = Namespace(
+        name=name,
+        text=sample_txt["txt"],
+        force=force,
+    )
+
+    ctx = nullcontext()
+    msg = ""
+
+    if not txt_exists:
+        msg = "no TXT"
+        ctx = pytest.raises(CliWarning)
+
+    with ctx as exc_info:
+        host.txt_remove(args)
 
     if exc_info:
         assert msg.lower() in exc_info.exconly().lower()
