@@ -432,3 +432,28 @@ def _ip_move_handler(
     # TODO: use expect_ordered_request
     _host_info_by_name_handler(httpserver, from_host_info)
     _host_info_by_name_handler(httpserver, to_host_info)
+
+
+###############
+# Module: dhcp
+###############
+
+
+def _dhcp_get_ip_by_arg_handler(
+    httpserver: HTTPServer,
+    *,
+    sample_host: Optional[Dict[str, Any]] = None,
+    sample_ipaddress: Optional[Dict[str, Any]] = None,
+    **kwargs,
+) -> None:
+    if not sample_host and not sample_ipaddress:
+        raise ValueError("Must provide either sample_host or sample_ipaddress")
+
+    if sample_host is not None:
+        _host_info_by_name_handler(httpserver, sample_host, **kwargs)
+    elif sample_ipaddress is not None:
+        httpserver.expect_oneshot_request(
+            "/api/v1/ipaddresses/",
+            method="GET",
+            query_string={"ipaddress": sample_ipaddress["ipaddress"]},
+        ).respond_with_json(get_list_response(sample_ipaddress))
