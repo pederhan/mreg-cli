@@ -155,16 +155,14 @@ def role_delete(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    info = get_role(args.name)
-    inuse = [i["name"] for i in info["hosts"]]
-
-    if inuse:
-        hosts = ", ".join(inuse)
+    role = Role.get_by_name_or_raise(args.name)
+    if role.hosts:
+        hosts = ", ".join(role.hosts)
         cli_error(f"Role {args.name!r} used on hosts: {hosts}")
-
-    path = f"/api/v1/hostpolicy/roles/{args.name}"
-    delete(path)
-    cli_info(f"Deleted role {args.name!r}", print_msg=True)
+    if role.delete():
+        cli_info(f"Deleted role {args.name!r}", print_msg=True)
+    else:
+        cli_error(f"Failed to delete role {args.name!r}")
 
 
 @command_registry.register_command(
