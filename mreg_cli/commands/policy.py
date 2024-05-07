@@ -87,7 +87,7 @@ def atom_create(args: argparse.Namespace) -> None:
     if args.created:
         params["create_date"] = args.created
 
-    Atom.create(params=params)  # pyright: ignore[reportUnusedCallResult]
+    Atom.create(params)  # pyright: ignore[reportUnusedCallResult]
     cli_info(f"Created new atom {args.name}", print_msg=True)
 
 
