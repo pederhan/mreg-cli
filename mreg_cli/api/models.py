@@ -523,6 +523,11 @@ class Role(HostPolicy, WithName):
         resp = post(Endpoint.HostPolicyRoleAddAtom.with_params(self.name), name=atom)
         return resp.ok if resp else False
 
+    def remove_atom(self, atom: str) -> bool:
+        """Remove an atom from the role."""
+        resp = delete(Endpoint.HostPolicyRoleRemoveAtom.with_params(self.name, atom))
+        return resp.ok if resp else False
+
 
 class Atom(HostPolicy, WithName):
     """Model for an atom."""

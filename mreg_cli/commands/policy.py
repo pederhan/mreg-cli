@@ -210,16 +210,17 @@ def remove_atom(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (role, atom)
     """
-    info = get_role(args.role)
-    for atom in info["atoms"]:
-        if args.atom == atom["name"]:
+    role = Role.get_by_name_or_raise(args.role)
+    for atom in role.atoms:
+        if args.atom == atom:
             break
     else:
         cli_warning(f"Atom {args.atom!r} not a member of {args.role!r}")
 
-    path = f"/api/v1/hostpolicy/roles/{args.role}/atoms/{args.atom}"
-    delete(path)
-    cli_info(f"Removed atom {args.atom!r} from role {args.role!r}", print_msg=True)
+    if role.remove_atom(args.atom):
+        cli_info(f"Removed atom {args.atom!r} from role {args.role!r}", print_msg=True)
+    else:
+        cli_error(f"Failed to remove atom {args.atom!r} from role {args.role!r}")
 
 
 @command_registry.register_command(
