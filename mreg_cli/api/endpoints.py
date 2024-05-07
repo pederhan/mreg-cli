@@ -96,6 +96,8 @@ class Endpoint(str, Enum):
             Endpoint.Cnames,
             Endpoint.ForwardZones,
             Endpoint.ReverseZones,
+            Endpoint.HostPolicyRoles,
+            Endpoint.HostPolicyAtoms,
         ):
             return "name"
         if self == Endpoint.Networks:
