@@ -104,18 +104,17 @@ def atom_delete(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    get_atom(args.name)
+    atom = Atom.get_by_name_or_raise(args.name)
 
-    info = get_list("/api/v1/hostpolicy/roles/", params={"atoms__name__exact": args.name})
-    inuse = [i["name"] for i in info]
+    roles = Role.get_roles_with_atom(args.name)
+    if roles:
+        inuse = ", ".join([role.name for role in roles])
+        cli_error(f"Atom {args.name} used in roles: {inuse}")
 
-    if inuse:
-        roles = ", ".join(inuse)
-        cli_error(f"Atom {args.name} used in roles: {roles}")
-
-    path = f"/api/v1/hostpolicy/atoms/{args.name}"
-    delete(path)
-    cli_info(f"Deleted atom {args.name}", print_msg=True)
+    if atom.delete():
+        cli_info(f"Deleted atom {args.name}", print_msg=True)
+    else:
+        cli_error(f"Failed to delete atom {args.name}")
 
 
 @command_registry.register_command(
