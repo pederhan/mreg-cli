@@ -87,7 +87,7 @@ def atom_create(args: argparse.Namespace) -> None:
     if args.created:
         params["create_date"] = args.created
 
-    Atom.create(params)  # pyright: ignore[reportUnusedCallResult]
+    Atom.create(params)
     cli_info(f"Created new atom {args.name}", print_msg=True)
 
 
@@ -138,7 +138,7 @@ def role_create(args: argparse.Namespace) -> None:
     if args.created:
         params["create_date"] = args.created
 
-    Role.create(params)  # pyright: ignore[reportUnusedCallResult]
+    Role.create(params)
     cli_info(f"Created new role {args.name!r}", print_msg=True)
 
 
@@ -259,20 +259,11 @@ def list_atoms(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    manager = OutputManager()
-
-    def _format(key: str, value: str, padding: int = 20) -> None:
-        manager.add_formatted_line(key, value, padding)
-
-    params = {}
-    param, value = convert_wildcard_to_regex("name", args.name, True)
-    params[param] = value
-    info = get_list("/api/v1/hostpolicy/atoms/", params=params)
-    if info:
-        for i in info:
-            _format(i["name"], repr(i["description"]))
+    atoms = Atom.get_list_by_name_regex(args.name)
+    if atoms:
+        Atom.output_multiple_lines(atoms)
     else:
-        manager.add_line("No match")
+        OutputManager().add_line("No match")
 
 
 @command_registry.register_command(
