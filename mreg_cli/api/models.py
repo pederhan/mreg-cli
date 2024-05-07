@@ -33,6 +33,7 @@ from mreg_cli.utilities.api import (
     get_typed,
     post,
 )
+from mreg_cli.utilities.shared import convert_wildcard_to_regex
 
 _mac_regex = re.compile(r"^([0-9A-Fa-f]{2}[.:-]){5}([0-9A-Fa-f]{2})$")
 
@@ -276,7 +277,7 @@ class WithName(BaseModel, APIMixin):
 
         :param name: The name to check for existence.
         """
-        cls.get_by_name_or_raise(name)  # pyright: ignore[reportUnusedCallResult]
+        cls.get_by_name_or_raise(name)
 
     @classmethod
     def get_by_name(cls, name: str) -> Self | None:
@@ -296,6 +297,17 @@ class WithName(BaseModel, APIMixin):
         :raises CliWarning: If the role is not found.
         """
         return cls.get_by_field_or_raise(cls.__name_field__, name)
+
+    @classmethod
+    def get_list_by_name_regex(cls, name: str) -> list[Self]:
+        """Get multiple resources by a name regex.
+
+        :param name: The regex pattern for names to search for.
+        :returns: A list of resource objects.
+        """
+        param, value = convert_wildcard_to_regex(cls.__name_field__, name, True)
+        data = get_list(cls.endpoint(), params={param: value})
+        return [cls(**item) for item in data]
 
 
 class NameServer(FrozenModelWithTimestamps, WithTTL):
@@ -549,6 +561,31 @@ class Atom(HostPolicy, WithName):
         output_manager.add_line("Roles where this atom is a member:")
         for role in self.roles:
             output_manager.add_formatted_line("", role, padding)
+
+    @classmethod
+    def output_multiple(cls, atoms: list[Atom], padding: int = 14) -> None:
+        """Output multiple atoms to the console as a single formatted string.
+
+        :param atoms: List of atoms to output.
+        :param padding: Number of spaces for left-padding the output.
+        """
+        if not atoms:
+            return
+
+        OutputManager().add_line(
+            "{1:<{0}}{2}".format(padding, "Atoms:", ", ".join([atom.name for atom in atoms]))
+        )
+
+    @classmethod
+    def output_multiple_lines(cls, atoms: list[Atom], padding: int = 20) -> None:
+        """Output multiple atoms to the console, one atom per line.
+
+        :param atoms: List of atoms to output.
+        :param padding: Number of spaces for left-padding the output.
+        """
+        manager = OutputManager()
+        for atom in atoms:
+            manager.add_formatted_line(atom.name, f"{atom.description!r}", padding)
 
 
 class Label(FrozenModelWithTimestamps, APIMixin):
