@@ -179,20 +179,21 @@ def add_atom(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (role, atom)
     """
-    info = get_role(args.role)
-    for atom in info["atoms"]:
-        if args.atom == atom["name"]:
+    role = Role.get_by_name_or_raise(args.role)
+    for atom in role.atoms:
+        if args.atom == atom:
             cli_info(
                 f"Atom {args.atom!r} already a member of role {args.role!r}",
                 print_msg=True,
             )
             return
-    get_atom(args.atom)
 
-    data = {"name": args.atom}
-    path = f"/api/v1/hostpolicy/roles/{args.role}/atoms/"
-    post(path, **data)
-    cli_info(f"Added atom {args.atom!r} to role {args.role!r}", print_msg=True)
+    Atom.ensure_name_exists(args.atom)
+
+    if role.add_atom(args.atom):
+        cli_info(f"Added atom {args.atom!r} to role {args.role!r}", print_msg=True)
+    else:
+        cli_error(f"Failed to add atom {args.atom!r} to role {args.role!r}")
 
 
 @command_registry.register_command(
