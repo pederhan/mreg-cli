@@ -132,17 +132,13 @@ def role_create(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name, description, created)
     """
-    ret = _get_role(args.name)
-    if ret:
-        cli_error(f"Role name {args.name!r} already in use")
+    Role.ensure_name_not_exists(args.name)
 
-    data = {"name": args.name, "description": args.description}
-
+    params = {"name": args.name, "description": args.description}
     if args.created:
-        data["create_date"] = args.created
+        params["create_date"] = args.created
 
-    path = "/api/v1/hostpolicy/roles/"
-    post(path, **data)
+    Role.create(params)  # pyright: ignore[reportUnusedCallResult]
     cli_info(f"Created new role {args.name!r}", print_msg=True)
 
 
