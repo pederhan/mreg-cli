@@ -434,17 +434,11 @@ class HostPolicy(FrozenModel):
         :returns: The Atom or Role if found.
         :raises CliWarning: If the Atom or Role is not found.
         """
-        role_or_atom: Role | Atom
         for func in [Atom.get_by_name, Role.get_by_name]:
-            try:
-                role_or_atom = func(name)
-            except CliWarning:
-                pass  # try next function
-            else:
-                break  # found a match
-        else:
-            cli_warning(f"Could not find an atom or a role with name {name}")
-        return role_or_atom
+            role_or_atom = func(name)
+            if role_or_atom:
+                return role_or_atom
+        cli_warning(f"Could not find an atom or a role with name {name}")
 
     def output_timestamps(self, padding: int = 14) -> None:
         """Output the created and updated timestamps to the console."""
