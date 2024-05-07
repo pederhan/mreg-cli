@@ -32,6 +32,7 @@ from mreg_cli.utilities.api import (
     get_list_in,
     get_list_unique,
     get_typed,
+    post,
 )
 
 _mac_regex = re.compile(r"^([0-9A-Fa-f]{2}[.:-]){5}([0-9A-Fa-f]{2})$")
@@ -516,6 +517,11 @@ class Role(HostPolicy, WithName):
         """
         data = get_list(cls.endpoint(), params={"atoms__name__exact": name})
         return [Role(**item) for item in data]
+
+    def add_atom(self, atom: str) -> bool:
+        """Add an atom to the role."""
+        resp = post(Endpoint.HostPolicyRoleAddAtom.with_params(self.name), name=atom)
+        return resp.ok if resp else False
 
 
 class Atom(HostPolicy, WithName):
