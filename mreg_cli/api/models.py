@@ -20,7 +20,6 @@ from mreg_cli.api.abstracts import APIMixin, FrozenModel, FrozenModelWithTimesta
 from mreg_cli.api.endpoints import Endpoint
 from mreg_cli.api.fields import IPAddressField, MACAddressField, NameList
 from mreg_cli.config import MregCliConfig
-from mreg_cli.exceptions import CliWarning
 from mreg_cli.log import cli_error, cli_warning
 from mreg_cli.outputmanager import OutputManager
 from mreg_cli.types import IP_AddressT, IP_NetworkT, IP_Version
