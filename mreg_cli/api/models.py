@@ -269,7 +269,7 @@ class WithName(BaseModel, APIMixin):
 
         :param name: The name to check for uniqueness.
         """
-        cls.get_by_field_and_raise(cls.__name_field__, name)
+        cls.get_by_name_and_raise(name)
 
     @classmethod
     def ensure_name_exists(cls, name: str) -> None:
@@ -289,12 +289,21 @@ class WithName(BaseModel, APIMixin):
         return cls.get_by_field(cls.__name_field__, name)
 
     @classmethod
+    def get_by_name_and_raise(cls, name: str) -> None:
+        """Get a resource by name, raising a CliWarning if found.
+
+        :param name: The resource name to search for.
+        :raises CliWarning: If the resource is found.
+        """
+        return cls.get_by_field_and_raise(cls.__name_field__, name)
+
+    @classmethod
     def get_by_name_or_raise(cls, name: str) -> Self:
         """Get a resource by name, raising a CliWarning if not found.
 
         :param name: The resource name to search for.
         :returns: The resource.
-        :raises CliWarning: If the role is not found.
+        :raises CliWarning: If the resource is not found.
         """
         return cls.get_by_field_or_raise(cls.__name_field__, name)
 
@@ -308,6 +317,14 @@ class WithName(BaseModel, APIMixin):
         param, value = convert_wildcard_to_regex(cls.__name_field__, name, True)
         data = get_list(cls.endpoint(), params={param: value})
         return [cls(**item) for item in data]
+
+    def rename(self, new_name: str) -> bool:
+        """Rename the resource.
+
+        :param new_name: The new name to set.
+        :returns: True if the rename was successful.
+        """
+        return self.patch({self.__name_field__: new_name})
 
 
 class NameServer(FrozenModelWithTimestamps, WithTTL):
@@ -384,7 +401,7 @@ class Delegation(FrozenModelWithTimestamps, WithZone):
         return True
 
 
-class HostPolicy(FrozenModel):
+class HostPolicy(FrozenModel, WithName):
     """Base model for Host Policy objects.
 
     Note:
@@ -438,19 +455,69 @@ class HostPolicy(FrozenModel):
         """Creation time."""
         return self.created_at_tz_naive.replace(tzinfo=self.updated_at.tzinfo)
 
+    # Fetching Host Policy objects is a special case where we cannot
+    # re-use the methods defined in WithName, because we don't have an endpoint
+    # defined on the class that can fetch both Roles and Atoms.
+    # Thus, we need to define our own implementations of these methods.
     @classmethod
-    def get_role_or_atom(cls, name: str) -> Atom | Role:
+    def ensure_name_not_exists(cls, name: str) -> None:
+        """Get an Atom or Role by name.
+
+        :param name: The name to search for.
+        :raises CliWarning: If the Atom or Role is not found.
+        """
+        cls.get_role_or_atom_and_raise(name)
+
+    @classmethod
+    def ensure_name_exists(cls, name: str) -> None:
+        """Get an Atom or Role by name.
+
+        :param name: The name to search for.
+        :raises CliWarning: If the Atom or Role is not found.
+        """
+        cls.get_role_or_atom_or_raise(name)
+
+    @classmethod
+    def get_role_or_atom(cls, name: str) -> Atom | Role | None:
+        """Get an Atom or Role by name.
+
+        :param name: The name to search for.
+        :returns: The Atom or Role if found, else None.
+        """
+        for func in [Atom.get_by_name, Role.get_by_name]:
+            role_or_atom = func(name)
+            if role_or_atom:
+                return role_or_atom
+        return None
+
+    @classmethod
+    def get_role_or_atom_or_raise(cls, name: str) -> Atom | Role:
         """Get an Atom or Role by name.
 
         :param name: The name to search for.
         :returns: The Atom or Role if found.
         :raises CliWarning: If the Atom or Role is not found.
         """
-        for func in [Atom.get_by_name, Role.get_by_name]:
-            role_or_atom = func(name)
-            if role_or_atom:
-                return role_or_atom
+        role_or_atom = cls.get_role_or_atom(name)
+        if role_or_atom:
+            return role_or_atom
         cli_warning(f"Could not find an atom or a role with name {name}")
+
+    @classmethod
+    def get_role_or_atom_and_raise(cls, name: str) -> None:
+        """Get an Atom or Role by name.
+
+        :param name: The name to search for.
+        :returns: The Atom or Role if found.
+        :raises CliWarning: If the Atom or Role is not found.
+        """
+        role_or_atom = cls.get_role_or_atom(name)
+        if role_or_atom:
+            cli_warning(f"An atom or a role with name {name} already exists.")
+
+    def set_description(self, description: str) -> bool:
+        """Set a new description."""
+        return self.patch({"description": description})
 
     def output_timestamps(self, padding: int = 14) -> None:
         """Output the created and updated timestamps to the console."""

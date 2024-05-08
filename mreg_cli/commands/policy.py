@@ -399,13 +399,13 @@ def rename(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (oldname, newname)
     """
-    if _get_atom(args.oldname):
-        path = f"/api/v1/hostpolicy/atoms/{args.oldname}"
-    elif _get_role(args.oldname):
-        path = f"/api/v1/hostpolicy/roles/{args.oldname}"
-    else:
-        cli_warning("Could not find an atom or role with name {args.name!r}")
-    patch(path, name=args.newname)
+    if args.oldname == args.newname:
+        cli_warning("Old and new names are the same")
+
+    HostPolicy.ensure_name_not_exists(args.newname)
+
+    role_or_atom = HostPolicy.get_role_or_atom_or_raise(args.oldname)
+    role_or_atom.rename(args.newname)
     cli_info(f"Renamed {args.oldname!r} to {args.newname!r}", True)
 
 
