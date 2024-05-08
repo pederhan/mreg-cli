@@ -337,19 +337,12 @@ def host_add(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (role, hosts)
     """
-    get_role(args.role)
-    info = []
-    for name in args.hosts:
-        info.append(host_info_by_name(name, follow_cname=False))
+    role = Role.get_by_name_or_raise(args.role)
+    hosts = [Host.get_by_any_means_or_raise(host) for host in args.hosts]
 
-    for i in info:
-        name = i["name"]
-        data = {
-            "name": name,
-        }
-        path = f"/api/v1/hostpolicy/roles/{args.role}/hosts/"
-        post(path, **data)
-        cli_info(f"Added host '{name}' to role '{args.role}'", print_msg=True)
+    for host in hosts:
+        role.add_host(host.name.hostname)
+        cli_info(f"Added host {host.name!r} to role {args.role!r}", print_msg=True)
 
 
 @command_registry.register_command(

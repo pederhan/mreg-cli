@@ -63,6 +63,7 @@ class Endpoint(str, Enum):
     HostPolicyRoles = "/api/v1/hostpolicy/roles/"
     HostPolicyRoleAddAtom = "/api/v1/hostpolicy/roles/{}/atoms/"
     HostPolicyRoleRemoveAtom = "/api/v1/hostpolicy/roles/{}/atoms/{}"
+    HostPolicyRoleAddHost = "/api/v1/hostpolicy/roles/{}/hosts/"
     HostPolicyAtoms = "/api/v1/hostpolicy/atoms/"
 
     ForwardZones = f"{Zones}forward/"

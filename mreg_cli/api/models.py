@@ -598,6 +598,14 @@ class Role(HostPolicy, WithName):
         """
         return [Label.get_by_id_or_raise(id_) for id_ in self.labels]
 
+    def add_host(self, name: str) -> bool:
+        """Add a host to the role by name.
+
+        :param name: The name of the host to add.
+        """
+        resp = post(Endpoint.HostPolicyRoleAddHost.with_params(self.name), name=name)
+        return resp.ok if resp else False
+
 
 class Atom(HostPolicy, WithName):
     """Model for an atom."""
