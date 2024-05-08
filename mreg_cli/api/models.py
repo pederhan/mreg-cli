@@ -318,7 +318,7 @@ class WithName(BaseModel, APIMixin):
         data = get_list(cls.endpoint(), params={param: value})
         return [cls(**item) for item in data]
 
-    def rename(self, new_name: str) -> bool:
+    def rename(self, new_name: str) -> Self:
         """Rename the resource.
 
         :param new_name: The new name to set.
@@ -515,7 +515,7 @@ class HostPolicy(FrozenModel, WithName):
         if role_or_atom:
             cli_warning(f"An atom or a role with name {name} already exists.")
 
-    def set_description(self, description: str) -> bool:
+    def set_description(self, description: str) -> Self:
         """Set a new description."""
         return self.patch({"description": description})
 
