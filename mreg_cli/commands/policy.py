@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-from mreg_cli.api.models import Atom, HostPolicy, Role
+from mreg_cli.api.models import Atom, Host, HostPolicy, Role
 from mreg_cli.commands.base import BaseCommand
 from mreg_cli.commands.registry import CommandRegistry
 from mreg_cli.log import cli_error, cli_info, cli_warning
@@ -365,27 +365,9 @@ def host_list(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (hosts)
     """
-    manager = OutputManager()
-
-    def _format(hostname: str, roleinfo: list[dict[str, Any]]) -> None:
-        if not roleinfo:
-            cli_info(f"Host {hostname!r} has no roles.", print_msg=True)
-        else:
-            manager.add_line(f"Roles for {hostname!r}:")
-            for role in roleinfo:
-                manager.add_line(f"  {role['name']}")
-
-    info = []
     for name in args.hosts:
-        info.append(host_info_by_name(name))
-
-    for i in info:
-        name = i["name"]
-        path = "/api/v1/hostpolicy/roles/"
-        params = {
-            "hosts__name": name,
-        }
-        _format(name, get_list(path, params=params))
+        host = Host.get_by_any_means_or_raise(name)
+        host.output_roles()
 
 
 @command_registry.register_command(

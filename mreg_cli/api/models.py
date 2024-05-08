@@ -579,7 +579,7 @@ class Role(HostPolicy, WithName):
         :returns: A list of Role objects.
         """
         data = get_list(cls.endpoint(), params={"atoms__name__exact": name})
-        return [Role(**item) for item in data]
+        return [cls(**item) for item in data]
 
     def add_atom(self, atom: str) -> bool:
         """Add an atom to the role."""
@@ -1907,6 +1907,17 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
             return
 
         CNAME.output_multiple(self.cnames, padding=padding)
+
+    def output_roles(self, padding: int = 14) -> None:
+        """Output the roles for the host."""
+        roles = self.roles()
+        manager = OutputManager()
+        if not roles:
+            manager.add_line(f"Host {self.name!r} has no roles")
+        else:
+            manager.add_line(f"Roles for {self.name!r}:")
+            for role in roles:
+                manager.add_line(f"  {role.name}")
 
     def __str__(self) -> str:
         """Return the host name as a string."""
