@@ -319,14 +319,8 @@ def list_members(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    info = get_role(args.name)
-    manager = OutputManager()
-    if info["atoms"]:
-        manager.add_line("Name:")
-        for i in info["atoms"]:
-            manager.add_line(f" {i['name']}")
-    else:
-        manager.add_line("No atom members")
+    role = Role.get_by_name_or_raise(args.name)
+    role.output_atoms()
 
 
 @command_registry.register_command(

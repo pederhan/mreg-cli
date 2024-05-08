@@ -511,6 +511,19 @@ class Role(HostPolicy, WithName):
         else:
             manager.add_line("No host uses this role")
 
+    def output_atoms(self, padding: int = 14) -> None:
+        """Output the atoms that are members of the role.
+
+        :param padding: Number of spaces for left-padding the output.
+        """
+        manager = OutputManager()
+        if self.atoms:
+            manager.add_line("Name:")
+            for atom in self.atoms:
+                manager.add_line(f" {atom}")
+        else:
+            manager.add_line("No atom members")
+
     @classmethod
     def output_multiple(cls, roles: list[Role], padding: int = 14) -> None:
         """Output multiple roles to the console.
