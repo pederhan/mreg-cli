@@ -423,13 +423,8 @@ def set_description(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name, description)
     """
-    if _get_atom(args.name):
-        path = f"/api/v1/hostpolicy/atoms/{args.name}"
-    elif _get_role(args.name):
-        path = f"/api/v1/hostpolicy/roles/{args.name}"
-    else:
-        cli_warning("Could not find an atom or role with name {args.name!r}")
-    patch(path, description=args.description)
+    role_or_atom = HostPolicy.get_role_or_atom_or_raise(args.name)
+    role_or_atom.set_description(args.description)
     cli_info(f"updated description to {args.description!r} for {args.name!r}", print_msg=True)
 
 
