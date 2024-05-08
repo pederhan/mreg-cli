@@ -527,21 +527,19 @@ class Role(HostPolicy, WithName):
             description: str
             labels: str
 
-        manager = OutputManager()
         rows: list[RoleTableRow] = []
         for role in roles:
             labels = role.get_labels()
-            labels_str = ", ".join([label.name for label in labels])
             row = RoleTableRow(
                 name=role.name,
                 description=role.description,
-                labels=labels_str,
+                labels=", ".join([label.name for label in labels]),
             )
             rows.append(row)
 
         keys = list(RoleTableRow.model_fields.keys())
         headers = [h.capitalize() for h in keys]
-        manager.add_formatted_table(
+        OutputManager().add_formatted_table(
             headers=headers,
             keys=keys,
             data=rows,
