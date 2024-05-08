@@ -14,7 +14,6 @@ from mreg_cli.types import Flag
 from mreg_cli.utilities.api import delete, get, get_list, patch, post
 from mreg_cli.utilities.history import format_history_items, get_history_items
 from mreg_cli.utilities.host import host_info_by_name
-from mreg_cli.utilities.shared import convert_wildcard_to_regex
 
 command_registry = CommandRegistry()
 
@@ -283,33 +282,11 @@ def list_roles(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    manager = OutputManager()
-
-    params = {}
-    param, value = convert_wildcard_to_regex("name", args.name, True)
-    params[param] = value
-    info = get_list("/api/v1/hostpolicy/roles/", params=params)
-    if not info:
-        manager.add_line("No match")
+    roles = Role.get_list_by_name_regex(args.name)
+    if not roles:
+        OutputManager().add_line("No match")
         return
-
-    labelnames = {}
-    labellist = get_list("/api/v1/labels/")
-    if labellist:
-        for i in labellist:
-            labelnames[i["id"]] = i["name"]
-
-    rows = []
-    for i in info:
-        # show label names instead of id numbers
-        labels = []
-        for j in i["labels"]:
-            labels.append(labelnames[j])
-        i["labels"] = ", ".join(labels)
-        rows.append(i)
-    manager.add_formatted_table(
-        ("Role", "Description", "Labels"), ("name", "description", "labels"), rows
-    )
+    Role.output_multiple_table(roles)
 
 
 @command_registry.register_command(

@@ -512,12 +512,40 @@ class Role(HostPolicy, WithName):
             "{1:<{0}}{2}".format(padding, "Roles:", ", ".join([role.name for role in roles]))
         )
 
-    def get_labels(self) -> list[Label]:
-        """Get the labels associated with the role.
+    @classmethod
+    def output_multiple_table(cls, roles: list[Role], padding: int = 14) -> None:
+        """Output multiple roles to the console in a table.
 
-        :returns: A list of Label objects.
+        :param roles: List of roles to output.
+        :param padding: Number of spaces for left-padding the output.
         """
-        return [Label.get_by_id_or_raise(id_) for id_ in self.labels]
+        if not roles:
+            return
+
+        class RoleTableRow(BaseModel):
+            name: str
+            description: str
+            labels: str
+
+        manager = OutputManager()
+        rows: list[RoleTableRow] = []
+        for role in roles:
+            labels = role.get_labels()
+            labels_str = ", ".join([label.name for label in labels])
+            row = RoleTableRow(
+                name=role.name,
+                description=role.description,
+                labels=labels_str,
+            )
+            rows.append(row)
+
+        keys = list(RoleTableRow.model_fields.keys())
+        headers = [h.capitalize() for h in keys]
+        manager.add_formatted_table(
+            headers=headers,
+            keys=keys,
+            data=rows,
+        )
 
     @classmethod
     def get_roles_with_atom(cls, name: str) -> list[Role]:
@@ -538,6 +566,13 @@ class Role(HostPolicy, WithName):
         """Remove an atom from the role."""
         resp = delete(Endpoint.HostPolicyRoleRemoveAtom.with_params(self.name, atom))
         return resp.ok if resp else False
+
+    def get_labels(self) -> list[Label]:
+        """Get the labels associated with the role.
+
+        :returns: A list of Label objects.
+        """
+        return [Label.get_by_id_or_raise(id_) for id_ in self.labels]
 
 
 class Atom(HostPolicy, WithName):
