@@ -302,14 +302,8 @@ def list_hosts(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    manager = OutputManager()
-    info = get_role(args.name)
-    if info["hosts"]:
-        manager.add_line("Name:")
-        for i in info["hosts"]:
-            manager.add_line(f" {i['name']}")
-    else:
-        manager.add_line("No host uses this role")
+    role = Role.get_by_name_or_raise(args.name)
+    role.output_hosts()
 
 
 @command_registry.register_command(

@@ -498,6 +498,19 @@ class Role(HostPolicy, WithName):
         for label in labels:
             output_manager.add_formatted_line("", label.name, padding)
 
+    def output_hosts(self, padding: int = 14) -> None:
+        """Output the hosts that use the role.
+
+        :param padding: Number of spaces for left-padding the output.
+        """
+        manager = OutputManager()
+        if self.hosts:
+            manager.add_line("Name:")
+            for host in self.hosts:
+                manager.add_line(f" {host}")
+        else:
+            manager.add_line("No host uses this role")
+
     @classmethod
     def output_multiple(cls, roles: list[Role], padding: int = 14) -> None:
         """Output multiple roles to the console.
