@@ -48,7 +48,6 @@ def get_model_aliases(model: BaseModel) -> dict[str, str]:
     Includes field names, alias, and validation alias(es).
     """
     fields: dict[str, str] = {}
-
     for field_name, field_info in model.model_fields.items():
         aliases = get_field_aliases(field_info)
         if model.model_config.get("populate_by_name"):
@@ -56,8 +55,25 @@ def get_model_aliases(model: BaseModel) -> dict[str, str]:
         # Assign aliases to field name in mapping
         for alias in aliases:
             fields[alias] = field_name
-
     return fields
+
+
+def validate_patched_model(model: BaseModel, fields: dict[str, Any]) -> None:
+    """Validate that model fields were patched correctly."""
+    aliases = get_model_aliases(model)
+    for key, value in fields.items():
+        field_name = key
+        if key in aliases:
+            field_name = aliases[key]
+        try:
+            nval = getattr(model, field_name)
+        except AttributeError:
+            cli_warning(f"Could not get value for {field_name} in patched object.")
+        if value is not None and str(nval) != str(value):
+            cli_warning(
+                # Should this reference `field_name` instead of `key`?
+                f"Patch failure! Tried to set {key} to {value}, but server returned {nval}."
+            )
 
 
 class FrozenModel(BaseModel):
@@ -328,7 +344,7 @@ class APIMixin(ABC):
 
         return obj
 
-    def patch(self, fields: dict[str, Any]) -> Self:
+    def patch(self, fields: dict[str, Any], validate: bool = True) -> Self:
         """Patch the object with the given values.
 
         Notes
@@ -344,22 +360,10 @@ class APIMixin(ABC):
 
         new_object = self.refetch()
 
-        # __init_subclass__ guarantees we inherit from BaseModel
-        # but we can't signal this to the type checker, so we cast here.
-        aliases = get_model_aliases(cast(BaseModel, new_object))
-        for key, value in fields.items():
-            field_name = key
-            if key in aliases:
-                field_name = aliases[key]
-            try:
-                nval = getattr(new_object, field_name)
-            except AttributeError:
-                cli_warning(f"Could not get value for {field_name} in patched object.")
-            if value and str(nval) != str(value):
-                cli_warning(
-                    # Should this reference `field_name` instead of `key`?
-                    f"Patch failure! Tried to set {key} to {value}, but server returned {nval}."
-                )
+        if validate:
+            # __init_subclass__ guarantees we inherit from BaseModel
+            # but we can't signal this to the type checker, so we cast here.
+            validate_patched_model(cast(BaseModel, new_object), fields)
 
         return new_object
 

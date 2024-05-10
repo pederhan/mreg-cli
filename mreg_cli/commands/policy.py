@@ -11,9 +11,8 @@ from mreg_cli.commands.registry import CommandRegistry
 from mreg_cli.log import cli_error, cli_info, cli_warning
 from mreg_cli.outputmanager import OutputManager
 from mreg_cli.types import Flag
-from mreg_cli.utilities.api import delete, get, get_list, patch, post
+from mreg_cli.utilities.api import get_list
 from mreg_cli.utilities.history import format_history_items, get_history_items
-from mreg_cli.utilities.host import host_info_by_name
 
 command_registry = CommandRegistry()
 
@@ -451,7 +450,10 @@ def add_label_to_role(args: argparse.Namespace) -> None:
     prog="label_remove",
     description="Remove a label from a role",
     short_desc="Remove label",
-    flags=[Flag("label"), Flag("role")],
+    flags=[
+        Flag("label", description="Label name", metavar="LABEL"),
+        Flag("role", description="Role name", metavar="ROLE"),
+    ],
 )
 def remove_label_from_role(args: argparse.Namespace) -> None:
     """Remove a label from a role.
@@ -459,24 +461,8 @@ def remove_label_from_role(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (role, label)
     """
     # find the role
-    path = f"/api/v1/hostpolicy/roles/{args.role}"
-    res = get(path, ok404=True)
-    if not res:
-        cli_warning(f"Could not find a role with name {args.role!r}")
-    role = res.json()
-    # find the label
-    labelpath = f"/api/v1/labels/name/{args.label}"
-    res = get(labelpath, ok404=True)
-    if not res:
-        cli_warning(f"Could not find a label with name {args.label!r}")
-    label = res.json()
-    # check if the role has the label
-    if label["id"] not in role["labels"]:
-        cli_warning(f"The role {args.role!r} doesn't have the label {args.label!r}")
-    # patch the role
-    ar = role["labels"]
-    ar.remove(label["id"])
-    patch(path, use_json=True, params={"labels": ar})
+    role = Role.get_by_name_or_raise(args.role)
+    role.remove_label(args.label)
     cli_info(f"Removed the label {args.label!r} from the role {args.role!r}.", print_msg=True)
 
 

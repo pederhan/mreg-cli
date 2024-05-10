@@ -678,7 +678,22 @@ class Role(HostPolicy, WithName):
 
         label_ids = self.labels.copy()
         label_ids.append(label.id)
-        return self.patch({"labels": label_ids})
+        return self.patch({"labels": label_ids}, validate=False)
+
+    def remove_label(self, label_name: str) -> Self:
+        """Add a label to the role.
+
+        :param label_name: The name of the label to add.
+
+        :returns: The updated Role object.
+        """
+        label = Label.get_by_name_or_raise(label_name)
+        if label.id not in self.labels:
+            cli_warning(f"The role {self.name!r} doesn't have the label {label_name!r}")
+
+        label_ids = self.labels.copy()
+        label_ids.remove(label.id)
+        return self.patch({"labels": label_ids}, validate=False)
 
     def add_host(self, name: str) -> bool:
         """Add a host to the role by name.
