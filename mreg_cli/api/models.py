@@ -649,12 +649,22 @@ class Role(HostPolicy, WithName):
         return [cls(**item) for item in data]
 
     def add_atom(self, atom: str) -> bool:
-        """Add an atom to the role."""
+        """Add an atom to the role.
+
+        :param atom: The name of the atom to add.
+
+        :returns: True if the atom was added. False otherwise.
+        """
         resp = post(Endpoint.HostPolicyRoleAddAtom.with_params(self.name), name=atom)
         return resp.ok if resp else False
 
     def remove_atom(self, atom: str) -> bool:
-        """Remove an atom from the role."""
+        """Remove an atom from the role.
+
+        :param atom: The name of the atom to remove.
+
+        :returns: True if the atom was removed. False otherwise.
+        """
         resp = delete(Endpoint.HostPolicyRoleRemoveAtom.with_params(self.name, atom))
         return resp.ok if resp else False
 
