@@ -432,32 +432,18 @@ def set_description(args: argparse.Namespace) -> None:
     prog="label_add",
     description="Add a label to a role",
     short_desc="Add label",
-    flags=[Flag("label"), Flag("role")],
+    flags=[
+        Flag("label", description="Label name", metavar="LABEL"),
+        Flag("role", description="Role name", metavar="ROLE"),
+    ],
 )
 def add_label_to_role(args: argparse.Namespace) -> None:
     """Add a label to a role.
 
     :param args: argparse.Namespace (role, label)
     """
-    # find the role
-    path = f"/api/v1/hostpolicy/roles/{args.role}"
-    res = get(path, ok404=True)
-    if not res:
-        cli_warning(f"Could not find a role with name {args.role!r}")
-    role = res.json()
-    # find the label
-    labelpath = f"/api/v1/labels/name/{args.label}"
-    res = get(labelpath, ok404=True)
-    if not res:
-        cli_warning(f"Could not find a label with name {args.label!r}")
-    label = res.json()
-    # check if the role already has the label
-    if label["id"] in role["labels"]:
-        cli_warning(f"The role {args.role!r} already has the label {args.label!r}")
-    # patch the role
-    ar = role["labels"]
-    ar.append(label["id"])
-    patch(path, labels=ar)
+    role = Role.get_by_name_or_raise(args.role)
+    role.add_label(args.label)
     cli_info(f"Added the label {args.label!r} to the role {args.role!r}.", print_msg=True)
 
 

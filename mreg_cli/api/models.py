@@ -665,6 +665,21 @@ class Role(HostPolicy, WithName):
         """
         return [Label.get_by_id_or_raise(id_) for id_ in self.labels]
 
+    def add_label(self, label_name: str) -> Self:
+        """Add a label to the role.
+
+        :param label_name: The name of the label to add.
+
+        :returns: The updated Role object.
+        """
+        label = Label.get_by_name_or_raise(label_name)
+        if label.id in self.labels:
+            cli_warning(f"The role {self.name!r} already has the label {label_name!r}")
+
+        label_ids = self.labels.copy()
+        label_ids.append(label.id)
+        return self.patch({"labels": label_ids})
+
     def add_host(self, name: str) -> bool:
         """Add a host to the role by name.
 
@@ -730,7 +745,7 @@ class Atom(HostPolicy, WithName):
             manager.add_formatted_line(atom.name, f"{atom.description!r}", padding)
 
 
-class Label(FrozenModelWithTimestamps, APIMixin):
+class Label(FrozenModelWithTimestamps, WithName):
     """Model for a label."""
 
     id: int  # noqa: A003
