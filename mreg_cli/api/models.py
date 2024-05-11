@@ -695,7 +695,7 @@ class Role(HostPolicy, WithName):
 
         label_ids = self.labels.copy()
         label_ids.append(label.id)
-        return self.patch({"labels": label_ids}, validate=False)
+        return self.patch({"labels": label_ids})
 
     def remove_label(self, label_name: str) -> Self:
         """Add a label to the role.
@@ -710,7 +710,7 @@ class Role(HostPolicy, WithName):
 
         label_ids = self.labels.copy()
         label_ids.remove(label.id)
-        return self.patch({"labels": label_ids}, validate=False)
+        return self.patch({"labels": label_ids})
 
     def add_host(self, name: str) -> bool:
         """Add a host to the role by name.

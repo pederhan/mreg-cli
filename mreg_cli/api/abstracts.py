@@ -61,19 +61,46 @@ def get_model_aliases(model: BaseModel) -> dict[str, str]:
 def validate_patched_model(model: BaseModel, fields: dict[str, Any]) -> None:
     """Validate that model fields were patched correctly."""
     aliases = get_model_aliases(model)
+
+    validators = {
+        list: _validate_lists,
+        dict: _validate_dicts,
+    }
     for key, value in fields.items():
         field_name = key
         if key in aliases:
             field_name = aliases[key]
+
         try:
             nval = getattr(model, field_name)
         except AttributeError:
             cli_warning(f"Could not get value for {field_name} in patched object.")
-        if value is not None and str(nval) != str(value):
+
+        # Ensure patched value is the one we tried to set
+        validator = validators.get(type(nval), _validate_default)
+        if not validator(nval, value):
             cli_warning(
-                # Should this reference `field_name` instead of `key`?
                 f"Patch failure! Tried to set {key} to {value}, but server returned {nval}."
             )
+
+
+def _validate_lists(new: list[Any], old: list[Any]) -> bool:
+    """Validate that two lists are equal."""
+    if len(new) != len(old):
+        return False
+    return all(x in old for x in new)
+
+
+def _validate_dicts(new: dict[str, Any], old: dict[str, Any]) -> bool:
+    """Validate that two dictionaries are equal."""
+    if len(new) != len(old):
+        return False
+    return all(old.get(k) == v for k, v in new.items())
+
+
+def _validate_default(new: Any, old: Any) -> bool:
+    """Validate that two values are equal."""
+    return str(new) == str(old)
 
 
 class FrozenModel(BaseModel):
@@ -354,6 +381,7 @@ class APIMixin(ABC):
              are). Odds are you want to pass an empty string instead.
 
         :param fields: The values to patch.
+        :param validate: Whether to validate the patched object.
         :returns: The object refetched from the server.
         """
         patch(self.endpoint().with_id(self.id_for_endpoint()), **fields)
