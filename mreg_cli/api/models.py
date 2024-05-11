@@ -648,23 +648,30 @@ class Role(HostPolicy, WithName):
         data = get_list(cls.endpoint(), params={"atoms__name__exact": name})
         return [cls(**item) for item in data]
 
-    def add_atom(self, atom: str) -> bool:
+    def add_atom(self, atom_name: str) -> bool:
         """Add an atom to the role.
 
-        :param atom: The name of the atom to add.
-
-        :returns: True if the atom was added. False otherwise.
+        :param atom_name: The name of the atom to add.
         """
-        resp = post(Endpoint.HostPolicyRoleAddAtom.with_params(self.name), name=atom)
+        Atom.ensure_name_exists(atom_name)
+        for atom in self.atoms:
+            if atom_name == atom:
+                cli_warning(f"Atom {atom!r} already a member of role {self.name!r}")
+
+        resp = post(Endpoint.HostPolicyRoleAddAtom.with_params(self.name), name=atom_name)
         return resp.ok if resp else False
 
-    def remove_atom(self, atom: str) -> bool:
+    def remove_atom(self, atom_name: str) -> bool:
         """Remove an atom from the role.
 
-        :param atom: The name of the atom to remove.
-
-        :returns: True if the atom was removed. False otherwise.
+        :param atom_name: The name of the atom to remove.
         """
+        for atom in self.atoms:
+            if atom_name == atom:
+                break
+        else:
+            cli_warning(f"Atom {atom_name!r} not a member of {self.name!r}")
+
         resp = delete(Endpoint.HostPolicyRoleRemoveAtom.with_params(self.name, atom))
         return resp.ok if resp else False
 
@@ -721,6 +728,13 @@ class Role(HostPolicy, WithName):
         resp = delete(Endpoint.HostPolicyRoleRemoveHost.with_params(self.name, name))
         return resp.ok if resp else False
 
+    def delete(self) -> bool:
+        """Delete the role."""
+        if self.hosts:
+            hosts = ", ".join(self.hosts)
+            cli_error(f"Role {self.name!r} used on hosts: {hosts}")
+        return super().delete()
+
 
 class Atom(HostPolicy, WithName):
     """Model for an atom."""
@@ -768,6 +782,14 @@ class Atom(HostPolicy, WithName):
         manager = OutputManager()
         for atom in atoms:
             manager.add_formatted_line(atom.name, f"{atom.description!r}", padding)
+
+    def delete(self) -> bool:
+        """Delete the atom."""
+        roles = Role.get_roles_with_atom(self.name)
+        if self.roles:
+            roles = ", ".join(self.roles)
+            cli_error(f"Atom {self.name!r} used in roles: {roles}")
+        return super().delete()
 
 
 class Label(FrozenModelWithTimestamps, WithName):

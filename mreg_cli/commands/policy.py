@@ -103,12 +103,6 @@ def atom_delete(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (name)
     """
     atom = Atom.get_by_name_or_raise(args.name)
-
-    roles = Role.get_roles_with_atom(args.name)
-    if roles:
-        inuse = ", ".join([role.name for role in roles])
-        cli_error(f"Atom {args.name} used in roles: {inuse}")
-
     if atom.delete():
         cli_info(f"Deleted atom {args.name}", print_msg=True)
     else:
@@ -154,9 +148,6 @@ def role_delete(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (name)
     """
     role = Role.get_by_name_or_raise(args.name)
-    if role.hosts:
-        hosts = ", ".join(role.hosts)
-        cli_error(f"Role {args.name!r} used on hosts: {hosts}")
     if role.delete():
         cli_info(f"Deleted role {args.name!r}", print_msg=True)
     else:
@@ -178,16 +169,6 @@ def add_atom(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (role, atom)
     """
     role = Role.get_by_name_or_raise(args.role)
-    for atom in role.atoms:
-        if args.atom == atom:
-            cli_info(
-                f"Atom {args.atom!r} already a member of role {args.role!r}",
-                print_msg=True,
-            )
-            return
-
-    Atom.ensure_name_exists(args.atom)
-
     if role.add_atom(args.atom):
         cli_info(f"Added atom {args.atom!r} to role {args.role!r}", print_msg=True)
     else:
@@ -209,12 +190,6 @@ def remove_atom(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (role, atom)
     """
     role = Role.get_by_name_or_raise(args.role)
-    for atom in role.atoms:
-        if args.atom == atom:
-            break
-    else:
-        cli_warning(f"Atom {args.atom!r} not a member of {args.role!r}")
-
     if role.remove_atom(args.atom):
         cli_info(f"Removed atom {args.atom!r} from role {args.role!r}", print_msg=True)
     else:
@@ -401,6 +376,7 @@ def rename(args: argparse.Namespace) -> None:
     if args.oldname == args.newname:
         cli_warning("Old and new names are the same")
 
+    # New name cannot exist
     HostPolicy.ensure_name_not_exists(args.newname)
 
     role_or_atom = HostPolicy.get_role_or_atom_or_raise(args.oldname)
