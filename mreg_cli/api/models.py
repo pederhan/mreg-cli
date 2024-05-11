@@ -537,7 +537,7 @@ class HostPolicy(FrozenModel, WithName):
         output_manager.add_line(f"{'Description:':<{padding}}{self.description}")
 
 
-class Role(HostPolicy, WithName):
+class Role(HostPolicy):
     """Model for a role."""
 
     id: int  # noqa: A003
@@ -736,7 +736,7 @@ class Role(HostPolicy, WithName):
         return super().delete()
 
 
-class Atom(HostPolicy, WithName):
+class Atom(HostPolicy):
     """Model for an atom."""
 
     id: int  # noqa: A003
