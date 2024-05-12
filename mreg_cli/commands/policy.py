@@ -5,13 +5,14 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from mreg_cli.api.history import HistoryResource
+from mreg_cli.api.history import HistoryResource
 from mreg_cli.api.models import Atom, Host, HostPolicy, Role
 from mreg_cli.commands.base import BaseCommand
 from mreg_cli.commands.registry import CommandRegistry
 from mreg_cli.log import cli_error, cli_info, cli_warning
 from mreg_cli.outputmanager import OutputManager
 from mreg_cli.types import Flag
-from mreg_cli.utilities.api import get_list
 from mreg_cli.utilities.history import format_history_items, get_history_items
 
 command_registry = CommandRegistry()
@@ -455,8 +456,8 @@ def atom_history(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    items = get_history_items(args.name, "hostpolicy_atom", data_relation="atoms")
-    format_history_items(args.name, items)
+    atom = Atom.get_by_name_or_raise(args.name)
+    atom.output_history(HistoryResource.HostPolicy_Atom)
 
 
 @command_registry.register_command(
