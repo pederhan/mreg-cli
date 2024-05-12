@@ -473,5 +473,5 @@ def role_history(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name)
     """
-    items = get_history_items(args.name, "hostpolicy_role", data_relation="roles")
-    format_history_items(args.name, items)
+    role = Role.get_by_name_or_raise(args.name)
+    role.output_history(HistoryResource.HostPolicy_Role)
