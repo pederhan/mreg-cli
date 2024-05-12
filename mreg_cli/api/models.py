@@ -21,7 +21,6 @@ from mreg_cli.api.endpoints import Endpoint
 from mreg_cli.api.fields import IPAddressField, MACAddressField, NameList
 from mreg_cli.config import MregCliConfig
 from mreg_cli.exceptions import (
-    CliWarning,
     DeleteFailure,
     EntityAlreadyExists,
     EntityNotFound,
@@ -293,10 +292,10 @@ class WithName(BaseModel, APIMixin):
 
     @classmethod
     def get_by_name_and_raise(cls, name: str) -> None:
-        """Get a resource by name, raising a CliWarning if found.
+        """Get a resource by name, raising EntityAlreadyExists if found.
 
         :param name: The resource name to search for.
-        :raises CliWarning: If the resource is found.
+        :raises EntityAlreadyExists: If the resource is found.
         """
         return cls.get_by_field_and_raise(cls.__name_field__, name)
 
@@ -306,7 +305,7 @@ class WithName(BaseModel, APIMixin):
 
         :param name: The resource name to search for.
         :returns: The resource.
-        :raises CliWarning: If the resource is not found.
+        :raises EntityNotFound: If the resource is not found.
         """
         return cls.get_by_field_or_raise(cls.__name_field__, name)
 
@@ -481,7 +480,7 @@ class HostPolicy(FrozenModel, WithName):
 
         :param name: The name to search for.
         :returns: The Atom or Role if found.
-        :raises CliWarning: If the Atom or Role is not found.
+        :raises EntityNotFound: If the Atom or Role is not found.
         """
         role_or_atom = cls.get_role_or_atom(name)
         if role_or_atom:
@@ -494,7 +493,7 @@ class HostPolicy(FrozenModel, WithName):
 
         :param name: The name to search for.
         :returns: The Atom or Role if found.
-        :raises CliWarning: If the Atom or Role is not found.
+        :raises EntityAlreadyExists: If the Atom or Role is found.
         """
         role_or_atom = cls.get_role_or_atom(name)
         if role_or_atom:
