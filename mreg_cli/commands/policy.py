@@ -341,7 +341,7 @@ def rename(args: argparse.Namespace) -> None:
         cli_warning("Old and new names are the same")
 
     # Check if role or atom with the new name already exists
-    HostPolicy.get_by_name_and_raise(args.newname)
+    HostPolicy.get_role_or_atom_and_raise(args.newname)
 
     role_or_atom = HostPolicy.get_role_or_atom_or_raise(args.oldname)
     role_or_atom.rename(args.newname)
