@@ -245,7 +245,7 @@ class WithTTL(BaseModel):
 
         The value of "default" sets the value to None, which is then converted to the empty string.
 
-        If a numeric TTL value is outside of the bounds, a cli_warning is raised.
+        If a numeric TTL value is outside of the bounds, InputFail is raised.
 
         :param ttl: The TTL target to set.
         :raises InputFailure: If the TTL value is outside the bounds.
@@ -642,7 +642,7 @@ class Role(HostPolicy):
         Atom.get_by_name_or_raise(atom_name)
         for atom in self.atoms:
             if atom_name == atom:
-                cli_warning(f"Atom {atom!r} already a member of role {self.name!r}")
+                raise EntityAlreadyExists(f"Atom {atom!r} already a member of role {self.name!r}")
 
         resp = post(Endpoint.HostPolicyRoleAddAtom.with_params(self.name), name=atom_name)
         return resp.ok if resp else False
@@ -656,7 +656,7 @@ class Role(HostPolicy):
             if atom_name == atom:
                 break
         else:
-            cli_warning(f"Atom {atom_name!r} not a member of {self.name!r}")
+            raise EntityNotFound(f"Atom {atom_name!r} not a member of {self.name!r}")
 
         resp = delete(Endpoint.HostPolicyRoleRemoveAtom.with_params(self.name, atom))
         return resp.ok if resp else False
@@ -677,7 +677,9 @@ class Role(HostPolicy):
         """
         label = Label.get_by_name_or_raise(label_name)
         if label.id in self.labels:
-            cli_warning(f"The role {self.name!r} already has the label {label_name!r}")
+            raise EntityAlreadyExists(
+                f"The role {self.name!r} already has the label {label_name!r}"
+            )
 
         label_ids = self.labels.copy()
         label_ids.append(label.id)
@@ -692,7 +694,7 @@ class Role(HostPolicy):
         """
         label = Label.get_by_name_or_raise(label_name)
         if label.id not in self.labels:
-            cli_warning(f"The role {self.name!r} doesn't have the label {label_name!r}")
+            raise EntityNotFound(f"The role {self.name!r} doesn't have the label {label_name!r}")
 
         label_ids = self.labels.copy()
         label_ids.remove(label.id)
@@ -718,7 +720,7 @@ class Role(HostPolicy):
         """Delete the role."""
         if self.hosts:
             hosts = ", ".join(self.hosts)
-            cli_error(f"Role {self.name!r} used on hosts: {hosts}")
+            raise DeleteFailure(f"Role {self.name!r} used on hosts: {hosts}")
         return super().delete()
 
 
@@ -774,7 +776,7 @@ class Atom(HostPolicy):
         roles = Role.get_roles_with_atom(self.name)
         if self.roles:
             roles = ", ".join(self.roles)
-            cli_error(f"Atom {self.name!r} used in roles: {roles}")
+            raise DeleteFailure(f"Atom {self.name!r} used in roles: {roles}")
         return super().delete()
 
 
@@ -1970,9 +1972,9 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
         """Return the zone for the host.
 
         :param accept_delegation: If True, accept delegation and return a Delegation object if the
-                                    zone of the host is delegated. Otherwise raise a cli_warning.
+                                    zone of the host is delegated. Otherwise raise EntityOwnershipMismatch.
         :param validate_zone_resolution: If True, validate that the resolved zone matches the
-                                          expected zone ID. Fail with a cli_warning if it does not.
+                                          expected zone ID. Fail with ValidationFailure if it does not.
         """
         if not self.zone:
             return None
