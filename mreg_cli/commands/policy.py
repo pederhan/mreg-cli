@@ -6,14 +6,12 @@ import argparse
 from typing import Any
 
 from mreg_cli.api.history import HistoryResource
-from mreg_cli.api.history import HistoryResource
 from mreg_cli.api.models import Atom, Host, HostPolicy, Role
 from mreg_cli.commands.base import BaseCommand
 from mreg_cli.commands.registry import CommandRegistry
 from mreg_cli.log import cli_error, cli_info, cli_warning
 from mreg_cli.outputmanager import OutputManager
 from mreg_cli.types import Flag
-from mreg_cli.utilities.history import format_history_items, get_history_items
 
 command_registry = CommandRegistry()
 
@@ -26,43 +24,6 @@ class PolicyCommands(BaseCommand):
         super().__init__(
             cli, command_registry, "policy", "Manage policies for hosts.", "Manage policies"
         )
-
-
-def _get_atom(name: str) -> list[dict[str, Any]]:
-    """Return a list with the atom info."""
-    return get_list("/api/v1/hostpolicy/atoms/", params={"name": name})
-
-
-def get_atom(name: str) -> dict[str, Any]:
-    """Return the atom info."""
-    ret = _get_atom(name)
-    if not ret:
-        cli_warning(f"Atom {name!r} does not exist")
-    return ret[0]
-
-
-def _get_role(name: str) -> list[dict[str, Any]]:
-    """Return a list with the role info."""
-    return get_list("/api/v1/hostpolicy/roles/", params={"name": name})
-
-
-def get_role(name: str) -> dict[str, Any]:
-    """Return the role info."""
-    ret = _get_role(name)
-    if not ret:
-        cli_warning(f"Role {name!r} does not exist")
-    return ret[0]
-
-
-def get_atom_or_role(name: str) -> tuple[str, dict[str, Any]]:
-    """Return the atom or role info."""
-    atom = _get_atom(name)
-    if atom:
-        return "atom", atom[0]
-    role = _get_role(name)
-    if role:
-        return "role", role[0]
-    cli_warning(f"Could not find an atom or a role with name: {name!r}")
 
 
 @command_registry.register_command(
