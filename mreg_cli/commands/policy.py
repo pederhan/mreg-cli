@@ -41,7 +41,8 @@ def atom_create(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name, description, created)
     """
-    Atom.ensure_name_not_exists(args.name)
+    # Check if atom with that name already exists
+    Atom.get_by_name_and_raise(args.name)
 
     params = {"name": args.name, "description": args.description}
     if args.created:
@@ -86,7 +87,8 @@ def role_create(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name, description, created)
     """
-    Role.ensure_name_not_exists(args.name)
+    # Check if role with that name already exists
+    Role.get_by_name_and_raise(args.name)
 
     params = {"name": args.name, "description": args.description}
     if args.created:
@@ -338,7 +340,8 @@ def rename(args: argparse.Namespace) -> None:
     if args.oldname == args.newname:
         cli_warning("Old and new names are the same")
 
-    HostPolicy.ensure_name_not_exists(args.newname)
+    # Check if role or atom with the new name already exists
+    HostPolicy.get_by_name_and_raise(args.newname)
 
     role_or_atom = HostPolicy.get_role_or_atom_or_raise(args.oldname)
     role_or_atom.rename(args.newname)

@@ -264,22 +264,6 @@ class WithName(BaseModel, APIMixin):
     """Name of the API field that holds the object's name."""
 
     @classmethod
-    def ensure_name_not_exists(cls, name: str) -> None:
-        """Ensure a name is not already used.
-
-        :param name: The name to check for uniqueness.
-        """
-        cls.get_by_name_and_raise(name)
-
-    @classmethod
-    def ensure_name_exists(cls, name: str) -> None:
-        """Ensure a resource with the name exists.
-
-        :param name: The name to check for existence.
-        """
-        cls.get_by_name_or_raise(name)
-
-    @classmethod
     def get_by_name(cls, name: str) -> Self | None:
         """Get a resource by name.
 
@@ -460,24 +444,6 @@ class HostPolicy(FrozenModel, WithName):
     # defined on the class that can fetch both Roles and Atoms.
     # Thus, we need to define our own implementations of these methods.
     @classmethod
-    def ensure_name_not_exists(cls, name: str) -> None:
-        """Get an Atom or Role by name.
-
-        :param name: The name to search for.
-        :raises CliWarning: If the Atom or Role is not found.
-        """
-        cls.get_role_or_atom_and_raise(name)
-
-    @classmethod
-    def ensure_name_exists(cls, name: str) -> None:
-        """Get an Atom or Role by name.
-
-        :param name: The name to search for.
-        :raises CliWarning: If the Atom or Role is not found.
-        """
-        cls.get_role_or_atom_or_raise(name)
-
-    @classmethod
     def get_role_or_atom(cls, name: str) -> Atom | Role | None:
         """Get an Atom or Role by name.
 
@@ -492,7 +458,7 @@ class HostPolicy(FrozenModel, WithName):
 
     @classmethod
     def get_role_or_atom_or_raise(cls, name: str) -> Atom | Role:
-        """Get an Atom or Role by name.
+        """Get an Atom or Role by name and raise if not found.
 
         :param name: The name to search for.
         :returns: The Atom or Role if found.
@@ -505,7 +471,7 @@ class HostPolicy(FrozenModel, WithName):
 
     @classmethod
     def get_role_or_atom_and_raise(cls, name: str) -> None:
-        """Get an Atom or Role by name.
+        """Get an Atom or Role by name and raise if found.
 
         :param name: The name to search for.
         :returns: The Atom or Role if found.
@@ -653,7 +619,8 @@ class Role(HostPolicy):
 
         :param atom_name: The name of the atom to add.
         """
-        Atom.ensure_name_exists(atom_name)
+        # Ensure the atom exists
+        Atom.get_by_name_or_raise(atom_name)
         for atom in self.atoms:
             if atom_name == atom:
                 cli_warning(f"Atom {atom!r} already a member of role {self.name!r}")
