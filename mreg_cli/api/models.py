@@ -677,7 +677,7 @@ class Role(HostPolicy):
 
         label_ids = self.labels.copy()
         label_ids.remove(label.id)
-        return self.patch({"labels": label_ids})
+        return self.patch({"labels": label_ids}, use_json=True)
 
     def add_host(self, name: str) -> bool:
         """Add a host to the role by name.
