@@ -655,7 +655,7 @@ class Role(HostPolicy):
             if atom_name == atom:
                 break
         else:
-            raise EntityNotFound(f"Atom {atom_name!r} not a member of {self.name!r}")
+            raise EntityOwnershipMismatch(f"Atom {atom_name!r} not a member of {self.name!r}")
 
         resp = delete(Endpoint.HostPolicyRoleRemoveAtom.with_params(self.name, atom))
         return resp.ok if resp else False
@@ -693,7 +693,9 @@ class Role(HostPolicy):
         """
         label = Label.get_by_name_or_raise(label_name)
         if label.id not in self.labels:
-            raise EntityNotFound(f"The role {self.name!r} doesn't have the label {label_name!r}")
+            raise EntityOwnershipMismatch(
+                f"The role {self.name!r} doesn't have the label {label_name!r}"
+            )
 
         label_ids = self.labels.copy()
         label_ids.remove(label.id)
