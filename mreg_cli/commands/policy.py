@@ -338,7 +338,6 @@ def rename(args: argparse.Namespace) -> None:
     if args.oldname == args.newname:
         cli_warning("Old and new names are the same")
 
-    # New name cannot exist
     HostPolicy.ensure_name_not_exists(args.newname)
 
     role_or_atom = HostPolicy.get_role_or_atom_or_raise(args.oldname)
@@ -398,7 +397,6 @@ def remove_label_from_role(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (role, label)
     """
-    # find the role
     role = Role.get_by_name_or_raise(args.role)
     role.remove_label(args.label)
     cli_info(f"Removed the label {args.label!r} from the role {args.role!r}.", print_msg=True)
