@@ -81,7 +81,7 @@ def add(args: argparse.Namespace) -> None:
 
     """
     ip = args.ip
-    hname = HostT(hostname=args.name)
+    hname = validate_hostname(args.name)
     macaddress = args.macaddress
 
     if macaddress is not None:
@@ -409,7 +409,7 @@ def rename(args: argparse.Namespace) -> None:
     :return: The updated Host or None
     """
     old_host = Host.get_by_any_means_or_raise(args.old_name)
-    new_name = HostT(hostname=args.new_name)
+    new_name = HostT(args.new_name)
     new_host = Host.get_by_any_means(new_name, inform_as_cname=True)
     if new_host:
         raise EntityAlreadyExists(f"host {new_host} already exists")

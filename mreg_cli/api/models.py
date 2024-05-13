@@ -18,7 +18,7 @@ from pydantic import (
 
 from mreg_cli.api.abstracts import APIMixin, FrozenModel, FrozenModelWithTimestamps
 from mreg_cli.api.endpoints import Endpoint
-from mreg_cli.api.fields import IPAddressField, MACAddressField, NameList
+from mreg_cli.api.fields import HostT, Hostname, IPAddressField, MACAddressField, NameList
 from mreg_cli.config import MregCliConfig
 from mreg_cli.exceptions import (
     DeleteError,
@@ -124,44 +124,6 @@ class NetworkOrIP(BaseModel):
     def is_network(self) -> bool:
         """Return True if the value is a network."""
         return self.is_ipv4_network() or self.is_ipv6_network()
-
-
-class HostT(BaseModel):
-    """A type for a hostname."""
-
-    hostname: str
-
-    @field_validator("hostname")
-    @classmethod
-    def validate_hostname(cls, value: str) -> str:
-        """Validate the hostname."""
-        value = value.lower()
-
-        if re.search(r"^(\*\.)?([a-z0-9_][a-z0-9\-]*\.?)+$", value) is None:
-            raise InputFailure(f"Invalid input for hostname: {value}")
-
-        # Assume user is happy with domain, but strip the dot.
-        if value.endswith("."):
-            return value[:-1]
-
-        # If a dot in name, assume long name.
-        if "." in value:
-            return value
-
-        config = MregCliConfig()
-        default_domain = config.get("domain")
-        # Append domain name if in config and it does not end with it
-        if default_domain and not value.endswith(default_domain):
-            return f"{value}.{default_domain}"
-        return value
-
-    def __str__(self) -> str:
-        """Return the hostname as a string."""
-        return self.hostname
-
-    def __repr__(self) -> str:
-        """Return the hostname as a string."""
-        return self.hostname
 
 
 class WithHost(BaseModel):
@@ -367,7 +329,7 @@ class ForwardZone(Zone, APIMixin):
         return Endpoint.ForwardZones
 
     @classmethod
-    def get_from_hostname(cls, hostname: HostT) -> Delegation | Zone | None:
+    def get_from_hostname(cls, hostname: Hostname) -> Delegation | Zone | None:
         """Get the zone from a hostname.
 
         Note: This method may return either a Delegation or a Zone object.
@@ -1091,14 +1053,8 @@ class CNAME(FrozenModelWithTimestamps, WithHost, WithZone, WithTTL, APIMixin):
     """Represents a CNAME record."""
 
     id: int  # noqa: A003
-    name: HostT
+    name: Hostname
     ttl: int | None = None
-
-    @field_validator("name", mode="before")
-    @classmethod
-    def validate_name(cls, value: str) -> HostT:
-        """Validate the hostname."""
-        return HostT(hostname=value)
 
     @classmethod
     def endpoint(cls) -> Endpoint:
@@ -1106,13 +1062,13 @@ class CNAME(FrozenModelWithTimestamps, WithHost, WithZone, WithTTL, APIMixin):
         return Endpoint.Cnames
 
     @classmethod
-    def get_by_name(cls, name: HostT) -> CNAME:
+    def get_by_name(cls, name: Hostname) -> CNAME:
         """Get a CNAME record by name.
 
         :param name: The name to search for.
         :returns: The CNAME record if found, None otherwise.
         """
-        data = get_item_by_key_value(Endpoint.Cnames, "name", name.hostname)
+        data = get_item_by_key_value(Endpoint.Cnames, "name", name)
         if not data:
             raise EntityNotFound(f"CNAME record for {name} not found.")
         return CNAME(**data)
@@ -1540,7 +1496,7 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
     """Model for an individual host."""
 
     id: int  # noqa: A003
-    name: HostT
+    name: Hostname
     ipaddresses: list[IPAddress]
     cnames: list[CNAME] = []
     mxs: list[MX] = []
@@ -1555,12 +1511,6 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
 
     # Note, we do not use WithZone here as this is optional and we resolve it differently.
     zone: int | None = None
-
-    @field_validator("name", mode="before")
-    @classmethod
-    def validate_name(cls, value: str) -> HostT:
-        """Validate the hostname."""
-        return HostT(hostname=value)
 
     @field_validator("comment", mode="before")
     @classmethod
@@ -1584,7 +1534,7 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
 
     @classmethod
     def get_by_any_means_or_raise(
-        cls, identifier: str | HostT, inform_as_cname: bool = True, inform_as_ptr: bool = True
+        cls, identifier: str, inform_as_cname: bool = True, inform_as_ptr: bool = True
     ) -> Host:
         """Get a host by the given identifier or raise EntityNotFound.
 
@@ -1607,7 +1557,7 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
 
     @classmethod
     def get_by_any_means(
-        cls, identifier: str | HostT, inform_as_cname: bool = True, inform_as_ptr: bool = True
+        cls, identifier: str, inform_as_cname: bool = True, inform_as_ptr: bool = True
     ) -> Host | None:
         """Get a host by the given identifier.
 
@@ -1643,7 +1593,7 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
         :returns: A Host object if the host was found, otherwise None.
         """
         host = None
-        if not isinstance(identifier, HostT):
+        if not isinstance(identifier, Hostname):
             if identifier.isdigit():
                 return Host.get_by_id(int(identifier))
 
@@ -1681,7 +1631,7 @@ class Host(FrozenModelWithTimestamps, WithTTL, APIMixin):
                 pass
 
             # Let us try to find the host by name...
-            name = HostT(hostname=identifier)
+            name = HostT(identifier)
         else:
             name = identifier
 

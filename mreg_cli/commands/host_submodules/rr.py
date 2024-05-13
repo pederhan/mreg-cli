@@ -611,7 +611,7 @@ def srv_add(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (name, priority, weight, port, host, ttl, force)
     """
-    sname = HostT(hostname=args.name)
+    sname = HostT(args.name)
     host = Host.get_by_any_means_or_raise(args.host)
 
     szone = ForwardZone.get_from_hostname(sname)
@@ -677,7 +677,7 @@ def srv_remove(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (name, priority, weight, port, host)
     """
     host = Host.get_by_any_means_or_raise(args.host)
-    sname = HostT(hostname=args.name)
+    sname = HostT(args.name)
 
     data: dict[str, str] = {
         "name": sname.hostname,
@@ -712,7 +712,7 @@ def srv_show(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (service)
     """
-    sname = HostT(hostname=args.service)
+    sname = HostT(args.service)
     srvs = Srv.get_list_by_field("name", sname.hostname)
 
     if len(srvs) == 0:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 
+from mreg_cli.api.fields import validate_hostname
 from mreg_cli.api.models import CNAME, ForwardZone, Host, HostT
 from mreg_cli.commands.host import registry as command_registry
 from mreg_cli.exceptions import (
@@ -39,7 +40,7 @@ def cname_add(args: argparse.Namespace) -> None:
     """
     # Get host info or raise exception
     host = Host.get_by_any_means_or_raise(args.name)
-    alias = HostT(hostname=args.alias)
+    alias = validate_hostname(args.alias)
 
     alias_in_use = Host.get_by_any_means(alias, inform_as_cname=False)
     if alias_in_use:
@@ -84,7 +85,7 @@ def cname_remove(args: argparse.Namespace) -> None:
     :param args: argparse.Namespace (name, alias)
     """
     host = Host.get_by_any_means_or_raise(args.name)
-    alias = HostT(hostname=args.alias)
+    alias = validate_hostname(args.alias)
 
     alias_as_host = Host.get_by_field("name", alias.hostname)
     if alias_as_host:
@@ -125,7 +126,7 @@ def cname_replace(args: argparse.Namespace) -> None:
 
     :param args: argparse.Namespace (cname, host)
     """
-    cname = HostT(hostname=args.cname)
+    cname = validate_hostname(args.cname)
     host = Host.get_by_any_means_or_raise(args.host)
 
     cname_obj = CNAME.get_by_name(cname)

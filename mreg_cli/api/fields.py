@@ -6,9 +6,11 @@ import ipaddress
 import re
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator, field_validator
+from pydantic import AfterValidator, BeforeValidator, TypeAdapter, field_validator
 
 from mreg_cli.api.abstracts import FrozenModel
+from mreg_cli.config import MregCliConfig
+from mreg_cli.exceptions import InputFailure
 from mreg_cli.types import IP_AddressT
 
 _mac_regex = re.compile(r"^([0-9A-Fa-f]{2}[.:-]){5}([0-9A-Fa-f]{2})$")
@@ -82,3 +84,30 @@ def _extract_name(value: dict[str, Any]) -> str:
 
 
 NameList = list[Annotated[str, BeforeValidator(_extract_name)]]
+
+
+def validate_hostname(value: str) -> Hostname:
+    """Validate the hostname."""
+    value = value.lower()
+
+    if re.search(r"^(\*\.)?([a-z0-9_][a-z0-9\-]*\.?)+$", value) is None:
+        raise InputFailure(f"Invalid input for hostname: {value}")
+
+    # Assume user is happy with domain, but strip the dot.
+    if value.endswith("."):
+        return value[:-1]
+
+    # If a dot in name, assume long name.
+    if "." in value:
+        return value
+
+    config = MregCliConfig()
+    default_domain = config.get("domain")
+    # Append domain name if in config and it does not end with it
+    if default_domain and not value.endswith(default_domain):
+        return f"{value}.{default_domain}"
+    return value
+
+
+Hostname = Annotated[str, AfterValidator(validate_hostname)]
+HostT = TypeAdapter(Hostname)
