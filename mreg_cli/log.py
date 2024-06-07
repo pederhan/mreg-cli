@@ -8,8 +8,8 @@ import re
 from datetime import datetime
 from typing import NoReturn
 
-from .exceptions import CliError, CliWarning
-from .outputmanager import OutputManager
+from mreg_cli.exceptions import CliError, CliWarning
+from mreg_cli.outputmanager import OutputManager
 
 logfile = None
 

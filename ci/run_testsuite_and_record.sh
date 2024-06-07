@@ -1,5 +1,6 @@
 #!/bin/bash
-cd `dirname $0`
+CI_DIR=`dirname $0`
+cd $CI_DIR
 
 # exit immediately on error
 set -e
@@ -34,7 +35,9 @@ group.user_set.add(user)
 
 # run the test suite
 rm -f new_testsuite_log.json
-echo "test" | mreg-cli -u test -d example.org --url http://127.0.0.1:8000 --source testsuite --record new_testsuite_log.json --record-without-timestamps >/dev/null
+cd ..
+echo "test" | coverage run --source=mreg_cli mreg_cli/main.py -u test -d example.org --url http://127.0.0.1:8000 --source $CI_DIR/testsuite --record $CI_DIR/new_testsuite_log.json --record-without-timestamps > /dev/null
+cd $CI_DIR
 
 # show a detailed diff
 python diff.py testsuite-result.json new_testsuite_log.json
